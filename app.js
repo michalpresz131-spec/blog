@@ -1,13 +1,38 @@
 const DRAFT_KEY = 'simple-blog-draft'
+const LOCAL_POSTS_KEY = 'simple-blog-posts'
+let apiAvailable = null
 
 function qs(sel){return document.querySelector(sel)}
 
 async function loadPosts(){
+	if(apiAvailable === false){
+		return loadLocalPosts()
+	}
 	try{
 		const res = await fetch('/api/posts')
-		if(!res.ok) return []
+		if(!res.ok) throw new Error('API unavailable')
+		apiAvailable = true
 		return await res.json()
+	}catch(e){
+		apiAvailable = false
+		return loadLocalPosts()
+	}
+}
+
+async function loadLocalPosts(){
+	try{
+		const stored = localStorage.getItem(LOCAL_POSTS_KEY)
+		if(stored) return JSON.parse(stored)
+		const res = await fetch('posts.json')
+		if(!res.ok) return []
+		const posts = await res.json()
+		localStorage.setItem(LOCAL_POSTS_KEY, JSON.stringify(posts))
+		return posts
 	}catch(e){return []}
+}
+
+function saveLocalPosts(posts){
+	try{localStorage.setItem(LOCAL_POSTS_KEY, JSON.stringify(posts))}catch(e){}
 }
 
 function escapeHtml(str){
@@ -52,6 +77,13 @@ async function render(){
 }
 
 async function addPost(title, content, image){
+	if(apiAvailable === false){
+		const posts = await loadLocalPosts()
+		posts.push({id: Date.now(), title, content, image: image || null, date: new Date().toISOString(), likes: 0})
+		saveLocalPosts(posts)
+		await render()
+		return
+	}
 	await fetch('/api/posts', {
 		method: 'POST',
 		headers: {'Content-Type':'application/json'},
@@ -61,6 +93,14 @@ async function addPost(title, content, image){
 }
 
 async function updatePost(id, title, content, image){
+	if(apiAvailable === false){
+		const posts = await loadLocalPosts()
+		const post = posts.find(p=>p.id === id)
+		if(post) Object.assign(post, {title, content, image: image || null, date: new Date().toISOString()})
+		saveLocalPosts(posts)
+		await render()
+		return
+	}
 	await fetch(`/api/posts/${id}`, {
 		method: 'PUT',
 		headers: {'Content-Type':'application/json'},
@@ -70,6 +110,12 @@ async function updatePost(id, title, content, image){
 }
 
 async function deletePost(id){
+	if(apiAvailable === false){
+		const posts = await loadLocalPosts()
+		saveLocalPosts(posts.filter(p=>p.id !== id))
+		await render()
+		return
+	}
 	await fetch(`/api/posts/${id}`, {method:'DELETE'})
 	await render()
 }
@@ -95,6 +141,11 @@ function importPostsFile(file){
 			if(!Array.isArray(data)) throw new Error('Invalid format')
 			const ok = data.every(p=>p && typeof p.title === 'string' && typeof p.content === 'string')
 			if(!ok) throw new Error('Invalid entries')
+			if(apiAvailable === false){
+				saveLocalPosts(data)
+				await render()
+				return
+			}
 			await fetch('/api/import', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(data)})
 			await render()
 		}catch(err){
@@ -280,6 +331,16 @@ async function init(){
 		} else if(el.classList.contains('like')){
 			if(!isNaN(id)){
 				try{
+					if(apiAvailable === false){
+						const posts = await loadLocalPosts()
+						const post = posts.find(p=>p.id === id)
+						if(post){
+							post.likes = (post.likes || 0) + 1
+							saveLocalPosts(posts)
+							el.textContent = `👍 ${post.likes}`
+						}
+						return
+					}
 					const res = await fetch(`/api/posts/${id}/like`, {method: 'POST'})
 					if(res.ok){
 						const data = await res.json()
