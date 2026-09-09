@@ -1,10 +1,33 @@
 const DRAFT_KEY = 'simple-blog-draft'
 const LOCAL_POSTS_KEY = 'simple-blog-posts'
+const SUPABASE_URL = 'https://bjzeuzhkcfhzalmtnkmz.supabase.co'
+const SUPABASE_KEY = 'sb_publishable_E7nowgc62eOjnyE86yuJbw_XSxfN03m'
+const USE_SUPABASE = window.location.hostname.endsWith('github.io')
 let apiAvailable = null
 
 function qs(sel){return document.querySelector(sel)}
 
+async function supabaseRequest(path, options = {}){
+	return fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+		...options,
+		headers: {
+			apikey: SUPABASE_KEY,
+			Authorization: `Bearer ${SUPABASE_KEY}`,
+			'Content-Type': 'application/json',
+			Prefer: 'return=representation',
+			...(options.headers || {})
+		}
+	})
+}
+
 async function loadPosts(){
+	if(USE_SUPABASE){
+		try{
+			const res = await supabaseRequest('posts?select=id,title,content,image,date,likes&status=eq.approved&order=date.asc')
+			if(!res.ok) throw new Error('Supabase unavailable')
+			return await res.json()
+		}catch(e){return []}
+	}
 	if(apiAvailable === false){
 		return loadLocalPosts()
 	}
@@ -58,8 +81,8 @@ function createPostElement(post){
 		<p>${escapeHtml(post.content)}</p>
 		<div class="actions">
 			<button data-id="${post.id}" class="btn alt like">👍 ${post.likes || 0}</button>
-			<button data-id="${post.id}" class="btn alt edit">Edit</button>
-			<button data-id="${post.id}" class="btn alt delete">Delete</button>
+			${USE_SUPABASE ? '' : `<button data-id="${post.id}" class="btn alt edit">Edit</button>
+			<button data-id="${post.id}" class="btn alt delete">Delete</button>`}
 		</div>
 	`
 	return el
@@ -77,6 +100,15 @@ async function render(){
 }
 
 async function addPost(title, content, image){
+	if(USE_SUPABASE){
+		const res = await supabaseRequest('posts', {
+			method: 'POST',
+			body: JSON.stringify({title, content, image: image || null, likes: 0, status: 'pending'})
+		})
+		if(!res.ok) throw new Error('Unable to submit post')
+		await render()
+		return
+	}
 	if(apiAvailable === false){
 		const posts = await loadLocalPosts()
 		posts.push({id: Date.now(), title, content, image: image || null, date: new Date().toISOString(), likes: 0})
@@ -93,6 +125,7 @@ async function addPost(title, content, image){
 }
 
 async function updatePost(id, title, content, image){
+	if(USE_SUPABASE) return
 	if(apiAvailable === false){
 		const posts = await loadLocalPosts()
 		const post = posts.find(p=>p.id === id)
@@ -110,6 +143,7 @@ async function updatePost(id, title, content, image){
 }
 
 async function deletePost(id){
+	if(USE_SUPABASE) return
 	if(apiAvailable === false){
 		const posts = await loadLocalPosts()
 		saveLocalPosts(posts.filter(p=>p.id !== id))
@@ -141,6 +175,22 @@ function importPostsFile(file){
 			if(!Array.isArray(data)) throw new Error('Invalid format')
 			const ok = data.every(p=>p && typeof p.title === 'string' && typeof p.content === 'string')
 			if(!ok) throw new Error('Invalid entries')
+			if(USE_SUPABASE){
+				const res = await supabaseRequest('posts', {
+					method: 'POST',
+					body: JSON.stringify(data.map(p=>({
+						title: p.title,
+						content: p.content,
+						image: p.image || null,
+						date: p.date || new Date().toISOString(),
+						likes: p.likes || 0,
+						status: 'pending'
+					})))
+				})
+				if(!res.ok) throw new Error('Unable to import posts')
+				await render()
+				return
+			}
 			if(apiAvailable === false){
 				saveLocalPosts(data)
 				await render()
@@ -243,6 +293,7 @@ async function init(){
 			setEditingUI(false, publishBtn, cancelBtn)
 		} else {
 			await addPost(title.value.trim(), content.value.trim(), currentImage)
+			if(USE_SUPABASE) alert('Your post was submitted for moderation.')
 		}
 		form.reset()
 		imageInput.value = ''
@@ -331,6 +382,17 @@ async function init(){
 		} else if(el.classList.contains('like')){
 			if(!isNaN(id)){
 				try{
+					if(USE_SUPABASE){
+						const posts = await loadPosts()
+						const post = posts.find(p=>p.id === id)
+						if(!post) return
+						const res = await supabaseRequest(`posts?id=eq.${id}`, {
+							method: 'PATCH',
+							body: JSON.stringify({likes: (post.likes || 0) + 1})
+						})
+						if(res.ok) el.textContent = `👍 ${(post.likes || 0) + 1}`
+						return
+					}
 					if(apiAvailable === false){
 						const posts = await loadLocalPosts()
 						const post = posts.find(p=>p.id === id)
@@ -378,7 +440,8 @@ async function init(){
 
 	const current = await loadPosts()
 	if(!current || current.length === 0){
-		await addPost('Welcome','This is your first post. Edit or delete it, or create new posts using the form above.')
+		if(USE_SUPABASE) await render()
+		else await addPost('Welcome','This is your first post. Edit or delete it, or create new posts using the form above.')
 	} else {
 		await render()
 	}

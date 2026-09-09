@@ -1,6 +1,14 @@
 # Allotment Mentality
 
-The blog runs locally with the Express API, and it can also be published as a static site on GitHub Pages. On Pages, posts are stored in each visitor's browser using `localStorage`, so browser data is not shared between visitors.
+The blog runs locally with the Express API and uses Supabase for shared moderation when published on GitHub Pages.
+
+## Moderation
+
+Hosted visitors can submit posts, but only posts with `status = approved` are displayed publicly. Review submissions in the Supabase Table Editor:
+
+`https://supabase.com/dashboard/project/bjzeuzhkcfhzalmtnkmz/editor`
+
+Change a row's `status` from `pending` to `approved` to publish it, or `rejected` to keep it hidden. The table and row-level security policies are already configured in the `AllotmentMentality` project.
 
 ## GitHub Pages
 
