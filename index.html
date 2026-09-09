@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width,initial-scale=1" />
+	<title>Allotment Mentality</title>
+	<link rel="stylesheet" href="style.css">
+</head>
+<body>
+	<header class="site-header">
+		<div class="container">
+			<h1>Allotment Mentality</h1>
+			<p class="tagline">healthy Cambridgeshire allotments blog</p>
+		</div>
+	</header>
+
+	<main class="container">
+		<section class="new-post">
+			<h2>Create a Post</h2>
+			<form id="postForm">
+				<input id="title" placeholder="Title" required />
+				<textarea id="content" placeholder="Write your post..." required></textarea>
+				<div style="margin:6px 0">
+					<label style="display:block;margin-bottom:6px;font-size:14px">Upload Image (optional)</label>
+					<input id="imageInput" type="file" accept="image/*" />
+					<div id="imagePreview" style="margin-top:8px"></div>
+				</div>
+				<div class="form-row">
+					<button type="submit" id="publishBtn" class="btn">Publish</button>
+					<button type="button" id="clearBtn" class="btn alt">Clear</button>
+					<button type="button" id="cancelBtn" class="btn alt" style="display:none">Cancel</button>
+				</div>
+				<div style="margin-top:8px;display:flex;gap:8px;align-items:center">
+					<button type="button" id="exportBtn" class="btn alt">Export Posts</button>
+					<label class="btn alt" style="display:inline-flex;align-items:center;gap:8px;cursor:pointer">
+						Import Posts
+						<input id="importInput" type="file" accept="application/json" style="display:none">
+					</label>
+				</div>
+			</form>
+		</section>
+
+		<section>
+			<h2>Posts</h2>
+			<div id="posts" class="posts"></div>
+		</section>
+	</main>
+
+	<footer class="site-footer">
+		<div class="container">Built with ❤️ — No backend, posts are stored in your browser</div>
+	</footer>
+
+	<script src="app.js"></script>
+</body>
+</html>
