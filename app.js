@@ -72,7 +72,7 @@ function createPostElement(post){
 	el.className = 'post'
 	let imageHtml = ''
 	if(post.image){
-		imageHtml = `<img src="${post.image}" style="width:100%;max-height:300px;object-fit:cover;border-radius:8px;margin-bottom:12px">`
+		imageHtml = `<img src="${post.image}" loading="lazy" decoding="async" style="width:100%;max-height:300px;object-fit:cover;border-radius:8px;margin-bottom:12px">`
 	}
 	el.innerHTML = `
 		<h3>${escapeHtml(post.title)}</h3>
