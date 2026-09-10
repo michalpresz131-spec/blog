@@ -90,33 +90,18 @@ function createPostElement(post){
 	return el
 }
 
-function loadPostImages(){
-	if(!USE_SUPABASE) return
-	const images = [...document.querySelectorAll('[data-image-id]')]
-	const loadImage = async img=>{
-		try{
-			const res = await supabaseRequest(`posts?id=eq.${img.dataset.imageId}&select=image`)
-			if(!res.ok) return
-			const data = await res.json()
-			if(data[0] && data[0].image){
-				img.src = data[0].image
-				img.style.display = 'block'
-			}
-		}catch(e){}
-	}
-	if(!('IntersectionObserver' in window)){
-		images.forEach(loadImage)
-		return
-	}
-	const observer = new IntersectionObserver(entries=>{
-		entries.forEach(entry=>{
-			if(entry.isIntersecting){
-				observer.unobserve(entry.target)
-				loadImage(entry.target)
-			}
-		})
-	},{rootMargin:'300px 0px'})
-	images.forEach(img=>observer.observe(img))
+async function loadPostImage(img){
+	if(!USE_SUPABASE || img.dataset.loaded) return
+	img.dataset.loaded = 'true'
+	try{
+		const res = await supabaseRequest(`posts?id=eq.${img.dataset.imageId}&select=image`)
+		if(!res.ok) return
+		const data = await res.json()
+		if(data[0] && data[0].image){
+			img.src = data[0].image
+			img.style.display = 'block'
+		}
+	}catch(e){}
 }
 
 async function render(){
@@ -128,7 +113,6 @@ async function render(){
 		return
 	}
 	posts.slice().reverse().forEach(p=>postsEl.appendChild(createPostElement(p)))
-	loadPostImages()
 }
 
 async function addPost(title, content, image){
@@ -408,6 +392,11 @@ async function init(){
 
 	qs('#posts').addEventListener('click', async (e)=>{
 		const el = e.target
+		const postEl = el.closest('.post')
+		if(postEl && !el.closest('button')){
+			const image = postEl.querySelector('[data-image-id]')
+			if(image) loadPostImage(image)
+		}
 		const id = Number(el.dataset.id)
 		if(el.classList.contains('delete')){
 			if(!isNaN(id)) await deletePost(id)
