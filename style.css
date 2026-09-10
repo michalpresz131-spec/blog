@@ -35,8 +35,8 @@ main.container, .site-header, .site-footer{
 .site-header{background:rgba(60,37,79,0.72);color:white;padding:32px 0}
 .site-header h1{margin:0;font-size:28px}
 .invitation{margin:8px 0 0;font-style:italic;font-size:18px;font-weight:600;line-height:1.4}
-.invitation .green{color:#86efac}
-.invitation .blue{color:#93c5fd}
+.invitation .green{color:#4ade80}
+.invitation .blue{color:#38bdf8}
 .tagline{margin:6px 0 0;color:rgba(255,255,255,0.9)}
 .new-post{margin:20px 0}
 form input, form textarea{width:100%;padding:12px;border-radius:8px;border:1px solid #e6e9ef;margin:6px 0;font:inherit}
