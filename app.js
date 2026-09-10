@@ -74,7 +74,7 @@ function createPostElement(post){
 	if(USE_SUPABASE){
 		imageHtml = `<img data-image-id="${post.id}" loading="lazy" decoding="async" alt="" style="display:none;width:100%;max-height:300px;object-fit:cover;border-radius:8px;margin-bottom:12px">`
 	} else if(post.image){
-		imageHtml = `<img src="${post.image}" loading="lazy" decoding="async" style="width:100%;max-height:300px;object-fit:cover;border-radius:8px;margin-bottom:12px">`
+		imageHtml = `<img src="${post.image}" loading="lazy" decoding="async" alt="" style="display:none;width:100%;max-height:300px;object-fit:cover;border-radius:8px;margin-bottom:12px">`
 	}
 	el.innerHTML = `
 		<button type="button" class="post-title">${escapeHtml(post.title)}</button>
@@ -395,7 +395,16 @@ async function init(){
 		const postEl = el.closest('.post')
 		if(postEl && el.closest('.post-title')){
 			const image = postEl.querySelector('[data-image-id]')
-			if(image) loadPostImage(image)
+			const localImage = image || postEl.querySelector('img')
+			if(localImage){
+				if(localImage.style.display === 'block'){
+					localImage.style.display = 'none'
+				} else if(USE_SUPABASE && !localImage.dataset.loaded){
+					await loadPostImage(localImage)
+				} else {
+					localImage.style.display = 'block'
+				}
+			}
 		}
 		const id = Number(el.dataset.id)
 		if(el.classList.contains('delete')){
