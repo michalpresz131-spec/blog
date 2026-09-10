@@ -1,7 +1,7 @@
 const DRAFT_KEY = 'simple-blog-draft'
 const LOCAL_POSTS_KEY = 'simple-blog-posts'
 const SUPABASE_URL = 'https://bjzeuzhkcfhzalmtnkmz.supabase.co'
-const SUPABASE_KEY = 'sb_publishable_E7nowgc62eOjnyE86yuJbw_XSxfN03m'
+const SUPABASE_KEY = 'sb_publishable_J7P-kMweBzUUJplE_ZgFQA_nIhvIcKD'
 const USE_SUPABASE = window.location.hostname.endsWith('github.io') || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
 let apiAvailable = null
 
