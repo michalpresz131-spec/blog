@@ -26,7 +26,7 @@ async function loadPosts(){
 			const res = await supabaseRequest('posts?select=id,title,content,image,date,likes&status=eq.approved&order=date.asc')
 			if(!res.ok) throw new Error('Supabase unavailable')
 			return await res.json()
-		}catch(e){return []}
+		}catch(e){return loadLocalPosts()}
 	}
 	if(apiAvailable === false){
 		return loadLocalPosts()
