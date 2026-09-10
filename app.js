@@ -23,7 +23,7 @@ async function supabaseRequest(path, options = {}){
 async function loadPosts(){
 	if(USE_SUPABASE){
 		try{
-			const res = await supabaseRequest('posts?select=id,title,content,image,date,likes&status=eq.approved&order=date.asc')
+			const res = await supabaseRequest('posts?select=id,title,content,date,likes&status=eq.approved&order=date.asc')
 			if(!res.ok) throw new Error('Supabase unavailable')
 			return await res.json()
 		}catch(e){return loadLocalPosts()}
@@ -71,7 +71,9 @@ function createPostElement(post){
 	const el = document.createElement('article')
 	el.className = 'post'
 	let imageHtml = ''
-	if(post.image){
+	if(USE_SUPABASE){
+		imageHtml = `<img data-image-id="${post.id}" loading="lazy" decoding="async" alt="" style="display:none;width:100%;max-height:300px;object-fit:cover;border-radius:8px;margin-bottom:12px">`
+	} else if(post.image){
 		imageHtml = `<img src="${post.image}" loading="lazy" decoding="async" style="width:100%;max-height:300px;object-fit:cover;border-radius:8px;margin-bottom:12px">`
 	}
 	el.innerHTML = `
@@ -88,6 +90,35 @@ function createPostElement(post){
 	return el
 }
 
+function loadPostImages(){
+	if(!USE_SUPABASE) return
+	const images = [...document.querySelectorAll('[data-image-id]')]
+	const loadImage = async img=>{
+		try{
+			const res = await supabaseRequest(`posts?id=eq.${img.dataset.imageId}&select=image`)
+			if(!res.ok) return
+			const data = await res.json()
+			if(data[0] && data[0].image){
+				img.src = data[0].image
+				img.style.display = 'block'
+			}
+		}catch(e){}
+	}
+	if(!('IntersectionObserver' in window)){
+		images.forEach(loadImage)
+		return
+	}
+	const observer = new IntersectionObserver(entries=>{
+		entries.forEach(entry=>{
+			if(entry.isIntersecting){
+				observer.unobserve(entry.target)
+				loadImage(entry.target)
+			}
+		})
+	},{rootMargin:'300px 0px'})
+	images.forEach(img=>observer.observe(img))
+}
+
 async function render(){
 	const postsEl = qs('#posts')
 	postsEl.innerHTML = ''
@@ -97,6 +128,7 @@ async function render(){
 		return
 	}
 	posts.slice().reverse().forEach(p=>postsEl.appendChild(createPostElement(p)))
+	loadPostImages()
 }
 
 async function addPost(title, content, image){
