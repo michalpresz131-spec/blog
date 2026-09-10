@@ -393,7 +393,7 @@ async function init(){
 	qs('#posts').addEventListener('click', async (e)=>{
 		const el = e.target
 		const postEl = el.closest('.post')
-		if(postEl && !el.closest('button')){
+		if(postEl && el.closest('h3')){
 			const image = postEl.querySelector('[data-image-id]')
 			if(image) loadPostImage(image)
 		}
