@@ -113,6 +113,11 @@ async function render(){
 		return
 	}
 	posts.slice().reverse().forEach(p=>postsEl.appendChild(createPostElement(p)))
+	const firstImage = postsEl.querySelector('.post img')
+	if(firstImage){
+		if(USE_SUPABASE) await loadPostImage(firstImage)
+		else firstImage.style.display = 'block'
+	}
 }
 
 async function addPost(title, content, image){
