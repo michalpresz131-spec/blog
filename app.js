@@ -77,7 +77,7 @@ function createPostElement(post){
 		imageHtml = `<img src="${post.image}" loading="lazy" decoding="async" style="width:100%;max-height:300px;object-fit:cover;border-radius:8px;margin-bottom:12px">`
 	}
 	el.innerHTML = `
-		<h3>${escapeHtml(post.title)}</h3>
+		<button type="button" class="post-title">${escapeHtml(post.title)}</button>
 		<div class="meta">${new Date(post.date).toLocaleString()}</div>
 		${imageHtml}
 		<p>${escapeHtml(post.content)}</p>
@@ -393,7 +393,7 @@ async function init(){
 	qs('#posts').addEventListener('click', async (e)=>{
 		const el = e.target
 		const postEl = el.closest('.post')
-		if(postEl && el.closest('h3')){
+		if(postEl && el.closest('.post-title')){
 			const image = postEl.querySelector('[data-image-id]')
 			if(image) loadPostImage(image)
 		}

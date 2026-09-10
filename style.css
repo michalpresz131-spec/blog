@@ -47,7 +47,7 @@ form input[type="file"]{padding:8px;max-width:100%}
 .btn.alt{background:transparent;color:var(--accent);border:1px solid rgba(37,99,235,0.15)}
 .posts{display:grid;grid-template-columns:1fr;gap:12px;margin-top:12px}
 .post{background:var(--card);padding:16px;border-radius:var(--radius);box-shadow:0 6px 18px rgba(15,23,42,0.06)}
-.post h3{margin:0 0 6px}
+.post-title{display:block;width:100%;margin:0 0 6px;padding:0;border:0;background:none;color:var(--text);font:inherit;font-size:20px;font-weight:700;text-align:left;cursor:pointer}
 .post .meta{color:var(--muted);font-size:13px;margin-bottom:8px}
 .post p{margin:0 0 8px;white-space:pre-wrap}
 .post .actions{display:flex;gap:8px;flex-wrap:wrap}
