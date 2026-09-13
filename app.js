@@ -83,11 +83,52 @@ function createPostElement(post){
 		<p>${escapeHtml(post.content)}</p>
 		<div class="actions">
 			<button data-id="${post.id}" class="btn alt like">👍 ${post.likes || 0}</button>
+			<button data-id="${post.id}" class="btn alt view">View</button>
 			${USE_SUPABASE ? '' : `<button data-id="${post.id}" class="btn alt edit">Edit</button>
 			<button data-id="${post.id}" class="btn alt delete">Delete</button>`}
 		</div>
 	`
 	return el
+}
+
+function ensurePostViewer(){
+	let viewer = qs('#postViewer')
+	if(!viewer){
+		viewer = document.createElement('div')
+		viewer.id = 'postViewer'
+		viewer.className = 'post-viewer hidden'
+		viewer.setAttribute('aria-hidden', 'true')
+		document.body.appendChild(viewer)
+	}
+	return viewer
+}
+
+function closePostViewer(){
+	const viewer = qs('#postViewer')
+	if(!viewer) return
+	viewer.classList.add('hidden')
+	viewer.setAttribute('aria-hidden', 'true')
+	viewer.innerHTML = ''
+}
+
+function showPostViewer(post){
+	const viewer = ensurePostViewer()
+	const imageHtml = post.image ? `<img src="${escapeHtml(post.image)}" alt="${escapeHtml(post.title)}" class="viewer-image">` : ''
+	viewer.classList.remove('hidden')
+	viewer.setAttribute('aria-hidden', 'false')
+	viewer.innerHTML = `
+		<div class="post-viewer-backdrop" data-close="true"></div>
+		<div class="post-viewer-dialog" role="dialog" aria-modal="true" aria-labelledby="postViewerTitle">
+			<button type="button" class="viewer-close" aria-label="Close">×</button>
+			<h2 id="postViewerTitle">${escapeHtml(post.title)}</h2>
+			<div class="meta">${new Date(post.date).toLocaleString()}</div>
+			${imageHtml}
+			<p>${escapeHtml(post.content)}</p>
+			<div class="viewer-stats">👍 ${post.likes || 0}</div>
+		</div>
+	`
+	viewer.querySelector('.viewer-close').addEventListener('click', closePostViewer)
+	viewer.querySelector('.post-viewer-backdrop').addEventListener('click', closePostViewer)
 }
 
 async function loadPostImage(img){
@@ -331,41 +372,6 @@ async function init(){
 		clearDraft()
 	})
 
-	// Source - https://stackoverflow.com/q/73888164
-// Posted by Ableez
-// Retrieved 2026-02-13, License - CC BY-SA 4.0
-
-        function liked(heart){
-            heart.classList.toggle("liked");
-            if (heart.liked) {
-                click ++;
-            } else {
-                click --;
-            }
-            document.getElementById('clicks').innerHTML = click;
-        } 
-// Source - https://stackoverflow.com/q/73888164
-// Posted by Ableez
-// Retrieved 2026-02-13, License - CC BY-SA 4.0
-
-        function liked(heart){
-            heart.classList.toggle("liked");
-            if (heart.liked) {
-                click ++;
-            } else {
-                click --;
-            }
-            document.getElementById('clicks').innerHTML = click;
-        } 
-        function liked(heart){
-            heart.classList.toggle("liked");
-            if (heart.liked) {
-                click ++;
-            } else {
-                click --;
-            }
-            document.getElementById('clicks').innerHTML = click;
-        } 
 	cancelBtn.addEventListener('click', ()=>{
 		// cancel editing or clear draft
 		if(editingId !== null){
@@ -412,6 +418,12 @@ async function init(){
 		const id = Number(el.dataset.id)
 		if(el.classList.contains('delete')){
 			if(!isNaN(id)) await deletePost(id)
+		} else if(el.classList.contains('view')){
+			if(!isNaN(id)){
+				const posts = await loadPosts()
+				const post = posts.find(x=>x.id === id)
+				if(post) showPostViewer(post)
+			}
 		} else if(el.classList.contains('like')){
 			if(!isNaN(id)){
 				try{
