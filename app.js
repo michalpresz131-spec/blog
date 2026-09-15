@@ -413,9 +413,16 @@ async function render(){
 
 async function addPost(title, content, image){
 	if(USE_SUPABASE){
-		const res = await supabaseRequest('rpc/submit_post', {
+		const res = await supabaseRequest('posts', {
 			method: 'POST',
-			body: JSON.stringify({p_title: title, p_content: content, p_image: image || null})
+			body: JSON.stringify({
+				title,
+				content,
+				image: image || null,
+				date: new Date().toISOString(),
+				likes: 0,
+				status: 'pending'
+			})
 		})
 		if(!res.ok) throw new Error('Unable to submit post')
 		await render()
@@ -686,11 +693,12 @@ async function init(){
 						const posts = await loadPosts()
 						const post = posts.find(p=>p.id === id)
 						if(!post) return
-						const res = await supabaseRequest('rpc/like_post', {
-							method: 'POST',
-							body: JSON.stringify({p_id: id})
+						const nextLikes = (post.likes || 0) + 1
+						const res = await supabaseRequest(`posts?id=eq.${id}`, {
+							method: 'PATCH',
+							body: JSON.stringify({likes: nextLikes})
 						})
-						if(res.ok) el.textContent = `👍 ${(post.likes || 0) + 1}`
+						if(res.ok) el.textContent = `👍 ${nextLikes}`
 						return
 					}
 					if(apiAvailable === false){
