@@ -1,6 +1,8 @@
 const DRAFT_KEY = 'simple-blog-draft'
 const LOCAL_POSTS_KEY = 'simple-blog-posts'
 const LOCAL_COMMENTS_KEY = 'simple-blog-comments'
+const MODERATOR_SESSION_KEY = 'simple-blog-comment-admin'
+const MODERATOR_PASSWORD = 'allotment-admin'
 const SUPABASE_URL = 'https://bjzeuzhkcfhzalmtnkmz.supabase.co'
 const SUPABASE_KEY = 'sb_publishable_J7P-kMweBzUUJplE_ZgFQA_nIhvIcKD'
 const USE_SUPABASE = window.location.hostname.endsWith('github.io') || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
@@ -307,9 +309,40 @@ async function loadPostImage(img){
 	}catch(e){}
 }
 
+function isModeratorLoggedIn(){
+	try{
+		return localStorage.getItem(MODERATOR_SESSION_KEY) === 'true'
+	}catch(e){
+		return false
+	}
+}
+
+function setModeratorLoggedIn(value){
+	try{
+		localStorage.setItem(MODERATOR_SESSION_KEY, value ? 'true' : 'false')
+	}catch(e){}
+}
+
 async function renderModerationQueue(){
 	const container = qs('#moderationQueue')
+	const loginPanel = qs('#moderationLoginForm')
+	const loginToggle = qs('#moderationLoginToggle')
+	const logoutBtn = qs('#moderationLogout')
 	if(!container) return
+	const loggedIn = isModeratorLoggedIn()
+	if(loginToggle){
+		loginToggle.style.display = loggedIn ? 'none' : 'inline-block'
+	}
+	if(loginPanel){
+		loginPanel.style.display = loggedIn ? 'none' : 'none'
+	}
+	if(logoutBtn){
+		logoutBtn.style.display = loggedIn ? 'inline-block' : 'none'
+	}
+	if(!loggedIn){
+		container.innerHTML = '<p class="comment-empty">Sign in to review pending comments.</p>'
+		return
+	}
 	try{
 		const pending = await loadPendingComments()
 		if(!pending.length){
@@ -717,6 +750,43 @@ async function init(){
 			}catch(err){
 				alert(err.message)
 			}
+		})
+	}
+
+	const moderationLoginToggle = qs('#moderationLoginToggle')
+	if(moderationLoginToggle){
+		moderationLoginToggle.addEventListener('click', () => {
+			const form = qs('#moderationLoginForm')
+			if(form){
+				form.style.display = form.style.display === 'none' ? 'grid' : 'none'
+			}
+		})
+	}
+
+	const moderationLoginForm = qs('#moderationLoginForm')
+	if(moderationLoginForm){
+		moderationLoginForm.addEventListener('submit', async (e)=>{
+			e.preventDefault()
+			const input = qs('#moderationPassword')
+			if(!input) return
+			if(input.value === MODERATOR_PASSWORD){
+				setModeratorLoggedIn(true)
+				moderationLoginForm.style.display = 'none'
+				await render()
+				alert('Moderator access enabled.')
+				input.value = ''
+				return
+			}
+			alert('Incorrect moderator password.')
+			input.value = ''
+		})
+	}
+
+	const moderationLogout = qs('#moderationLogout')
+	if(moderationLogout){
+		moderationLogout.addEventListener('click', () => {
+			setModeratorLoggedIn(false)
+			renderModerationQueue()
 		})
 	}
 

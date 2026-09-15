@@ -71,6 +71,13 @@
 
 		<section id="moderationSection" class="moderation-panel">
 			<h2>Moderate Comments</h2>
+			<button type="button" id="moderationLoginToggle" class="moderation-toggle">Admin login</button>
+			<form id="moderationLoginForm" class="moderation-login" style="display:none;">
+				<label for="moderationPassword">Moderator password</label>
+				<input id="moderationPassword" type="password" placeholder="Password" autocomplete="off" />
+				<button type="submit" class="btn alt small-btn">Open moderation</button>
+			</form>
+			<button type="button" id="moderationLogout" class="btn alt small-btn" style="display:none; margin-top: 8px;">Log out</button>
 			<div id="moderationQueue" class="moderation-queue"></div>
 		</section>
 	</main>
