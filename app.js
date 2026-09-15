@@ -1,5 +1,6 @@
 const DRAFT_KEY = 'simple-blog-draft'
 const LOCAL_POSTS_KEY = 'simple-blog-posts'
+const LOCAL_COMMENTS_KEY = 'simple-blog-comments'
 const SUPABASE_URL = 'https://bjzeuzhkcfhzalmtnkmz.supabase.co'
 const SUPABASE_KEY = 'sb_publishable_J7P-kMweBzUUJplE_ZgFQA_nIhvIcKD'
 const USE_SUPABASE = window.location.hostname.endsWith('github.io') || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
@@ -67,6 +68,122 @@ function escapeHtml(str){
 		.replace(/'/g,'&#39;')
 }
 
+function getLocalComments(){
+	try{
+		const raw = localStorage.getItem(LOCAL_COMMENTS_KEY)
+		return raw ? JSON.parse(raw) : []
+	}catch(e){return []}
+}
+
+function saveLocalComments(comments){
+	try{localStorage.setItem(LOCAL_COMMENTS_KEY, JSON.stringify(comments))}catch(e){}
+}
+
+function normalizeComment(comment){
+	return {
+		id: Number(comment.id ?? Date.now()),
+		post_id: Number(comment.post_id ?? comment.postId ?? 0),
+		author: String(comment.author || 'Anonymous'),
+		content: String(comment.content || ''),
+		date: comment.date || new Date().toISOString(),
+		status: comment.status || 'approved'
+	}
+}
+
+function renderCommentList(comments){
+	const list = Array.isArray(comments) ? comments : []
+	if(list.length === 0){
+		return '<div class="comment-empty">No comments yet.</div>'
+	}
+	return list.map(comment => `
+		<div class="comment-item">
+			<div class="comment-head">
+				<strong>${escapeHtml(comment.author || 'Anonymous')}</strong>
+				<span>${new Date(comment.date).toLocaleString()}</span>
+			</div>
+			<p>${escapeHtml(comment.content)}</p>
+		</div>
+	`).join('')
+}
+
+async function loadCommentsForPost(postId){
+	if(USE_SUPABASE){
+		try{
+			const res = await supabaseRequest(`comments?select=id,post_id,author,content,date,status&post_id=eq.${postId}&status=eq.approved&order=date.asc`)
+			if(!res.ok) throw new Error('Supabase comments unavailable')
+			return (await res.json()).map(normalizeComment)
+		}catch(e){
+			return getLocalComments()
+				.filter(c => Number(c.post_id) === Number(postId) && (c.status === 'approved' || !('status' in c)))
+				.map(normalizeComment)
+		}
+	}
+	return getLocalComments()
+		.filter(c => Number(c.post_id) === Number(postId) && (c.status === 'approved' || !('status' in c)))
+		.map(normalizeComment)
+}
+
+async function submitComment(postId, author, content){
+	const trimmedAuthor = String(author || '').trim()
+	const trimmedContent = String(content || '').trim()
+	if(!trimmedAuthor || !trimmedContent) return null
+	if(USE_SUPABASE){
+		const res = await supabaseRequest('comments', {
+			method: 'POST',
+			body: JSON.stringify({
+				post_id: Number(postId),
+				author: trimmedAuthor,
+				content: trimmedContent,
+				date: new Date().toISOString(),
+				status: 'pending'
+			})
+		})
+		if(!res.ok) throw new Error('Unable to submit comment')
+		return {message: 'Your comment was submitted for moderation.'}
+	}
+	const comments = getLocalComments()
+	comments.push({
+		id: Date.now(),
+		post_id: Number(postId),
+		author: trimmedAuthor,
+		content: trimmedContent,
+		date: new Date().toISOString(),
+		status: 'approved'
+	})
+	saveLocalComments(comments)
+	return {message: 'Comment posted.'}
+}
+
+async function loadPendingComments(){
+	if(USE_SUPABASE){
+		try{
+			const res = await supabaseRequest('comments?select=id,post_id,author,content,date,status&status=eq.pending&order=date.asc')
+			if(!res.ok) throw new Error('Unable to load moderation queue')
+			return (await res.json()).map(normalizeComment)
+		}catch(e){
+			return getLocalComments().filter(c => c.status === 'pending').map(normalizeComment)
+		}
+	}
+	return getLocalComments().filter(c => c.status === 'pending').map(normalizeComment)
+}
+
+async function updateCommentStatus(id, status){
+	if(USE_SUPABASE){
+		const res = await supabaseRequest(`comments?id=eq.${id}`, {
+			method: 'PATCH',
+			body: JSON.stringify({status})
+		})
+		if(!res.ok) throw new Error('Unable to update comment status')
+		return true
+	}
+	const comments = getLocalComments()
+	const comment = comments.find(c => Number(c.id) === Number(id))
+	if(!comment) return false
+	comment.status = status
+	saveLocalComments(comments)
+	return true
+}
+
 function createPostElement(post){
 	const el = document.createElement('article')
 	el.className = 'post'
@@ -76,6 +193,7 @@ function createPostElement(post){
 	} else if(post.image){
 		imageHtml = `<img data-loaded="true" src="${escapeHtml(post.image)}" loading="lazy" decoding="async" alt="" style="width:100%;max-height:300px;object-fit:cover;border-radius:8px;margin-bottom:12px">`
 	}
+	const comments = Array.isArray(post.comments) ? post.comments : []
 	el.innerHTML = `
 		<button type="button" class="post-title">${escapeHtml(post.title)}</button>
 		<div class="meta">${new Date(post.date).toLocaleString()}</div>
@@ -86,6 +204,15 @@ function createPostElement(post){
 			<button data-id="${post.id}" class="btn alt view">View</button>
 			${USE_SUPABASE ? '' : `<button data-id="${post.id}" class="btn alt edit">Edit</button>
 			<button data-id="${post.id}" class="btn alt delete">Delete</button>`}
+		</div>
+		<div class="comments-panel">
+			<div class="comments-title">Comments (${comments.length})</div>
+			<div class="comment-list">${renderCommentList(comments)}</div>
+			<form class="comment-form" data-post-id="${post.id}">
+				<input name="author" type="text" maxlength="60" placeholder="Your name" aria-label="Your name" required>
+				<textarea name="content" rows="3" placeholder="Write a comment..." aria-label="Write a comment" required></textarea>
+				<button type="submit" class="btn alt small-btn">Post comment</button>
+			</form>
 		</div>
 	`
 	return el
@@ -114,6 +241,7 @@ function closePostViewer(){
 function showPostViewer(post){
 	const viewer = ensurePostViewer()
 	const imageHtml = post.image ? `<img src="${escapeHtml(post.image)}" alt="${escapeHtml(post.title)}" class="viewer-image">` : ''
+	const comments = Array.isArray(post.comments) ? post.comments : []
 	viewer.classList.remove('hidden')
 	viewer.setAttribute('aria-hidden', 'false')
 	viewer.innerHTML = `
@@ -125,10 +253,44 @@ function showPostViewer(post){
 			${imageHtml}
 			<p>${escapeHtml(post.content)}</p>
 			<div class="viewer-stats">👍 ${post.likes || 0}</div>
+			<div class="viewer-comments">
+				<div class="comments-title">Comments (${comments.length})</div>
+				<div class="comment-list">${renderCommentList(comments)}</div>
+				<form class="comment-form" data-post-id="${post.id}">
+					<input name="author" type="text" maxlength="60" placeholder="Your name" aria-label="Your name" required>
+					<textarea name="content" rows="3" placeholder="Write a comment..." aria-label="Write a comment" required></textarea>
+					<button type="submit" class="btn alt small-btn">Post comment</button>
+				</form>
+			</div>
 		</div>
 	`
 	viewer.querySelector('.viewer-close').addEventListener('click', closePostViewer)
 	viewer.querySelector('.post-viewer-backdrop').addEventListener('click', closePostViewer)
+	const form = viewer.querySelector('.comment-form')
+	if(form){
+		form.addEventListener('submit', async (e)=>{
+			e.preventDefault()
+			const postId = Number(form.dataset.postId)
+			const authorField = form.querySelector('[name="author"]')
+			const contentField = form.querySelector('[name="content"]')
+			if(!postId || !authorField || !contentField) return
+			try{
+				const result = await submitComment(postId, authorField.value, contentField.value)
+				if(result){
+					form.reset()
+					const posts = await loadPosts()
+					const current = posts.find(p => p.id === postId)
+					if(current){
+						current.comments = await loadCommentsForPost(postId)
+						showPostViewer(current)
+					}
+					alert(result.message)
+				}
+			}catch(err){
+				alert(err.message)
+			}
+		})
+	}
 }
 
 async function loadPostImage(img){
@@ -145,6 +307,33 @@ async function loadPostImage(img){
 	}catch(e){}
 }
 
+async function renderModerationQueue(){
+	const container = qs('#moderationQueue')
+	if(!container) return
+	try{
+		const pending = await loadPendingComments()
+		if(!pending.length){
+			container.innerHTML = '<p class="comment-empty">No pending comments.</p>'
+			return
+		}
+		container.innerHTML = pending.map(comment => `
+			<div class="moderation-item" data-comment-id="${comment.id}">
+				<div class="moderation-meta">
+					<strong>${escapeHtml(comment.author || 'Anonymous')}</strong>
+					<span>${new Date(comment.date).toLocaleString()}</span>
+				</div>
+				<p>${escapeHtml(comment.content)}</p>
+				<div class="moderation-actions">
+					<button type="button" class="btn approve-comment" data-comment-id="${comment.id}">Approve</button>
+					<button type="button" class="btn alt reject-comment" data-comment-id="${comment.id}">Reject</button>
+				</div>
+			</div>
+		`).join('')
+	}catch(e){
+		container.innerHTML = '<p class="comment-empty">Moderation queue unavailable.</p>'
+	}
+}
+
 async function render(){
 	const postsEl = qs('#posts')
 	postsEl.innerHTML = ''
@@ -153,10 +342,15 @@ async function render(){
 		postsEl.innerHTML = '<p class="small">No posts yet — create one above.</p>'
 		return
 	}
-	posts.slice().reverse().forEach(p=>postsEl.appendChild(createPostElement(p)))
+	const withComments = await Promise.all(posts.map(async (post) => {
+		post.comments = await loadCommentsForPost(post.id)
+		return post
+	}))
+	withComments.slice().reverse().forEach(p=>postsEl.appendChild(createPostElement(p)))
 	if(USE_SUPABASE){
 		await Promise.all(Array.from(postsEl.querySelectorAll('[data-image-id]'), loadPostImage))
 	}
+	await renderModerationQueue()
 }
 
 async function addPost(title, content, image){
@@ -422,7 +616,10 @@ async function init(){
 			if(!isNaN(id)){
 				const posts = await loadPosts()
 				const post = posts.find(x=>x.id === id)
-				if(post) showPostViewer(post)
+				if(post){
+					post.comments = await loadCommentsForPost(post.id)
+					showPostViewer(post)
+				}
 			}
 		} else if(el.classList.contains('like')){
 			if(!isNaN(id)){
@@ -482,6 +679,46 @@ async function init(){
 			}
 		}
 	})
+
+	qs('#posts').addEventListener('submit', async (e)=>{
+		const form = e.target.closest('.comment-form')
+		if(!form) return
+		e.preventDefault()
+		const postId = Number(form.dataset.postId)
+		const author = form.querySelector('[name="author"]')
+		const content = form.querySelector('[name="content"]')
+		if(!postId || !author || !content) return
+		try{
+			const result = await submitComment(postId, author.value, content.value)
+			if(result){
+				form.reset()
+				await render()
+				alert(result.message)
+			}
+		}catch(err){
+			alert(err.message)
+		}
+	})
+
+	const moderationQueue = qs('#moderationQueue')
+	if(moderationQueue){
+		moderationQueue.addEventListener('click', async (e)=>{
+			const btn = e.target.closest('button')
+			if(!btn) return
+			const commentId = Number(btn.dataset.commentId)
+			if(!commentId) return
+			const nextStatus = btn.classList.contains('approve-comment') ? 'approved' : 'rejected'
+			try{
+				const ok = await updateCommentStatus(commentId, nextStatus)
+				if(ok){
+					await render()
+					alert(`Comment ${nextStatus}.`)
+				}
+			}catch(err){
+				alert(err.message)
+			}
+		})
+	}
 
 	const current = await loadPosts()
 	if(!current || current.length === 0){
