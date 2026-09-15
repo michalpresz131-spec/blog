@@ -130,18 +130,32 @@ async function submitComment(postId, author, content){
 	const trimmedContent = String(content || '').trim()
 	if(!trimmedAuthor || !trimmedContent) return null
 	if(USE_SUPABASE){
-		const res = await supabaseRequest('comments', {
-			method: 'POST',
-			body: JSON.stringify({
+		try{
+			const res = await supabaseRequest('comments', {
+				method: 'POST',
+				body: JSON.stringify({
+					post_id: Number(postId),
+					author: trimmedAuthor,
+					content: trimmedContent,
+					date: new Date().toISOString(),
+					status: 'pending'
+				})
+			})
+			if(!res.ok) throw new Error('Supabase rejected the new comment')
+			return {message: 'Your comment was submitted for moderation.'}
+		}catch(e){
+			const comments = getLocalComments()
+			comments.push({
+				id: Date.now(),
 				post_id: Number(postId),
 				author: trimmedAuthor,
 				content: trimmedContent,
 				date: new Date().toISOString(),
 				status: 'pending'
 			})
-		})
-		if(!res.ok) throw new Error('Unable to submit comment')
-		return {message: 'Your comment was submitted for moderation.'}
+			saveLocalComments(comments)
+			return {message: 'Comment saved locally. Supabase moderation is currently unavailable.'}
+		}
 	}
 	const comments = getLocalComments()
 	comments.push({
