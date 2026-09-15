@@ -323,6 +323,17 @@ function setModeratorLoggedIn(value){
 	}catch(e){}
 }
 
+function toggleModeratorLogin(){
+	const form = qs('#moderationLoginForm')
+	const toggle = qs('#moderationLoginToggle')
+	if(!form) return
+	const isVisible = form.style.display !== 'none'
+	form.style.display = isVisible ? 'none' : 'grid'
+	if(toggle){
+		toggle.textContent = isVisible ? 'Admin login' : 'Close login'
+	}
+}
+
 async function renderModerationQueue(){
 	const container = qs('#moderationQueue')
 	const loginPanel = qs('#moderationLoginForm')
@@ -755,12 +766,8 @@ async function init(){
 
 	const moderationLoginToggle = qs('#moderationLoginToggle')
 	if(moderationLoginToggle){
-		moderationLoginToggle.addEventListener('click', () => {
-			const form = qs('#moderationLoginForm')
-			if(form){
-				form.style.display = form.style.display === 'none' ? 'grid' : 'none'
-			}
-		})
+		moderationLoginToggle.addEventListener('click', toggleModeratorLogin)
+		moderationLoginToggle.textContent = 'Admin login'
 	}
 
 	const moderationLoginForm = qs('#moderationLoginForm')
