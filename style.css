@@ -66,6 +66,9 @@ form input[type="file"]{padding:8px;max-width:100%}
 .comment-form textarea{margin:0}
 .small-btn{padding:8px 12px;min-height:36px}
 .moderation-panel{margin-top:20px;padding:16px;border:1px solid rgba(37,99,235,0.15);border-radius:12px;background:rgba(255,255,255,0.8)}
+.moderation-toggle{background:none;border:none;color:var(--primary, #2563eb);padding:0;font-weight:600;text-decoration:underline;cursor:pointer;margin-bottom:10px}
+.moderation-login{display:grid;gap:8px;max-width:360px;margin-bottom:8px}
+.moderation-login input{margin:0}
 .moderation-queue{display:grid;gap:12px}
 .moderation-item{background:#fff;border:1px solid #e6e9ef;border-radius:10px;padding:12px}
 .moderation-meta{display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:8px;color:var(--muted);font-size:12px}
