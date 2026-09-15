@@ -359,7 +359,7 @@ async function renderModerationQueue(){
 		loginToggle.style.display = loggedIn ? 'none' : 'inline-block'
 	}
 	if(loginPanel){
-		loginPanel.style.display = loggedIn ? 'none' : 'none'
+		loginPanel.style.display = loggedIn ? 'none' : 'grid'
 	}
 	if(logoutBtn){
 		logoutBtn.style.display = loggedIn ? 'inline-block' : 'none'
