@@ -205,10 +205,11 @@ function createPostElement(post){
 	el.className = 'post'
 	let imageHtml = ''
 	if(USE_SUPABASE){
-		imageHtml = `<img data-image-id="${post.id}" loading="lazy" decoding="async" alt="" style="display:none;width:100%;max-height:300px;object-fit:cover;border-radius:8px;margin-bottom:12px">`
+		imageHtml = `<img data-image-id="${post.id}" loading="lazy" decoding="async" alt="" style="display:none;width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:8px;margin-bottom:12px">`
 	} else if(post.image){
-		imageHtml = `<img data-loaded="true" src="${escapeHtml(post.image)}" loading="lazy" decoding="async" alt="" style="width:100%;max-height:300px;object-fit:cover;border-radius:8px;margin-bottom:12px">`
+		imageHtml = `<img data-loaded="true" src="${escapeHtml(post.image)}" loading="lazy" decoding="async" alt="" style="width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:8px;margin-bottom:12px">`
 	}
+	// ...rest of the function stays the same
 	const comments = Array.isArray(post.comments) ? post.comments : []
 	el.innerHTML = `
 		<button type="button" class="post-title">${escapeHtml(post.title)}</button>
@@ -313,24 +314,16 @@ function showPostViewer(post){
 }
 
 async function loadPostImage(img){
-	// in createPostElement — replace both imageHtml assignments
-if(USE_SUPABASE){
-	imageHtml = `<img data-image-id="${post.id}" loading="lazy" decoding="async" alt="" style="display:none;width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:8px;margin-bottom:12px">`
-} else if(post.image){
-	imageHtml = `<img data-loaded="true" src="${escapeHtml(post.image)}" loading="lazy" decoding="async" alt="" style="width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:8px;margin-bottom:12px">`
-}
-	}
-function isModeratorLoggedIn(){
+	if(!USE_SUPABASE || img.dataset.loaded) return
+	img.dataset.loaded = 'true'
 	try{
-		return localStorage.getItem(MODERATOR_SESSION_KEY) === 'true'
-	}catch(e){
-		return false
-	}
-}
-
-function setModeratorLoggedIn(value){
-	try{
-		localStorage.setItem(MODERATOR_SESSION_KEY, value ? 'true' : 'false')
+		const res = await supabaseRequest(`posts?id=eq.${img.dataset.imageId}&select=image`)
+		if(!res.ok) return
+		const data = await res.json()
+		if(data[0] && data[0].image){
+			img.src = data[0].image
+			img.style.display = 'block'
+		}
 	}catch(e){}
 }
 
