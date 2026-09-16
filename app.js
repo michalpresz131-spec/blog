@@ -567,8 +567,8 @@ async function loadVisitCount(){
 			const res = await fetch(url, {cache: 'no-store'})
 			if(!res.ok) continue
 			const data = await res.json()
-			const visits = Number(data && data.visits ? data.visits : (data.visits === 0 ? 0 : 0))
-			counter.textContent = `Visits: ${visits.toLocaleString()}`
+			const visits = Number(data && typeof data.visits === 'number' ? data.visits : 0)
+			counter.textContent = `Total visits: ${visits.toLocaleString()}`
 			return
 		}catch(err){
 			lastError = err
