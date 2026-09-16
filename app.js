@@ -313,19 +313,13 @@ function showPostViewer(post){
 }
 
 async function loadPostImage(img){
-	if(!USE_SUPABASE || img.dataset.loaded) return
-	img.dataset.loaded = 'true'
-	try{
-		const res = await supabaseRequest(`posts?id=eq.${img.dataset.imageId}&select=image`)
-		if(!res.ok) return
-		const data = await res.json()
-		if(data[0] && data[0].image){
-			img.src = data[0].image
-			img.style.display = 'block'
-		}
-	}catch(e){}
+	// in createPostElement — replace both imageHtml assignments
+if(USE_SUPABASE){
+	imageHtml = `<img data-image-id="${post.id}" loading="lazy" decoding="async" alt="" style="display:none;width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:8px;margin-bottom:12px">`
+} else if(post.image){
+	imageHtml = `<img data-loaded="true" src="${escapeHtml(post.image)}" loading="lazy" decoding="async" alt="" style="width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:8px;margin-bottom:12px">`
 }
-
+	}
 function isModeratorLoggedIn(){
 	try{
 		return localStorage.getItem(MODERATOR_SESSION_KEY) === 'true'
