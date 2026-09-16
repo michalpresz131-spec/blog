@@ -4,9 +4,60 @@ const fs = require('fs')
 
 const DATA_FILE = path.join(__dirname, 'posts.json')
 const VISITS_FILE = path.join(__dirname, 'visits.json')
+const SUPABASE_URL = process.env.SUPABASE_URL || 'https://bjzeuzhkcfhzalmtnkmz.supabase.co'
+const SUPABASE_KEY = process.env.SUPABASE_KEY || 'sb_publishable_J7P-kMweBzUUJplE_ZgFQA_nIhvIcKD'
 let posts = []
 let nextId = 1
 let visitCount = 0
+
+async function getSupabaseVisitTotal(){
+  try{
+    const listRes = await fetch(`${SUPABASE_URL}/rest/v1/site_visits?select=id,total_visits&order=id.asc&limit=1`, {
+      method: 'GET',
+      headers: {
+        apikey: SUPABASE_KEY,
+        Authorization: `Bearer ${SUPABASE_KEY}`,
+        'Content-Type': 'application/json'
+      }
+    })
+    if(!listRes.ok) throw new Error('Supabase fetch failed')
+    const rows = await listRes.json()
+    if(!Array.isArray(rows) || rows.length === 0){
+      const createRes = await fetch(`${SUPABASE_URL}/rest/v1/site_visits`, {
+        method: 'POST',
+        headers: {
+          apikey: SUPABASE_KEY,
+          Authorization: `Bearer ${SUPABASE_KEY}`,
+          'Content-Type': 'application/json',
+          Prefer: 'return=representation'
+        },
+        body: JSON.stringify({ total_visits: 1 })
+      })
+      if(!createRes.ok) throw new Error('Supabase create failed')
+      const created = await createRes.json()
+      const total = Number(Array.isArray(created) ? created[0]?.total_visits : created?.total_visits || 1)
+      return total
+    }
+
+    const row = rows[0]
+    const nextTotal = Number(row.total_visits || 0) + 1
+    const patchRes = await fetch(`${SUPABASE_URL}/rest/v1/site_visits?id=eq.${row.id}`, {
+      method: 'PATCH',
+      headers: {
+        apikey: SUPABASE_KEY,
+        Authorization: `Bearer ${SUPABASE_KEY}`,
+        'Content-Type': 'application/json',
+        Prefer: 'return=representation'
+      },
+      body: JSON.stringify({ total_visits: nextTotal })
+    })
+    if(!patchRes.ok) throw new Error('Supabase patch failed')
+    return nextTotal
+  }catch(e){
+    console.warn('Supabase visits unavailable, falling back to local counter:', e.message)
+    return null
+  }
+}
 
 // Load posts from file
 function loadPosts(){
@@ -75,10 +126,15 @@ app.get('/api/posts', (req, res)=>{
 })
 
 // Visit counter
-app.get('/api/visits', (req, res)=>{
+app.get('/api/visits', async (req, res)=>{
+  const hostedTotal = await getSupabaseVisitTotal()
+  if(hostedTotal !== null){
+    return res.json({visits: hostedTotal})
+  }
+
   visitCount += 1
   saveVisits()
-  res.json({visits: visitCount})
+  return res.json({visits: visitCount})
 })
 
 // create post
