@@ -552,14 +552,18 @@ function setEditingUI(isEditing, publishBtn, cancelBtn){
 async function loadVisitCount(){
 	const counter = qs('#visitCounter')
 	if(!counter) return
+	const apiUrl = window.location.protocol === 'file:'
+		? 'http://localhost:8000/api/visits'
+		: '/api/visits'
 	try{
-		const res = await fetch('/api/visits')
+		const res = await fetch(apiUrl)
 		if(!res.ok) throw new Error('Visit counter unavailable')
 		const data = await res.json()
 		const visits = Number(data && data.visits ? data.visits : 0)
 		counter.textContent = `Visits: ${visits.toLocaleString()}`
 	}catch(err){
 		counter.textContent = 'Visits: unavailable'
+		console.error('Failed to load visit count:', err)
 	}
 }
 
