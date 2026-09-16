@@ -553,30 +553,29 @@ async function loadVisitCount(){
 	const counter = qs('#visitCounter')
 	if(!counter) return
 
-	const candidates = []
-	if(window.location.protocol === 'file:'){
-		candidates.push('http://localhost:8000/api/visits')
-		candidates.push('http://127.0.0.1:8000/api/visits')
-	}
-	candidates.push('/api/visits')
-	candidates.push('visits.json')
-
-	let lastError = null
-	for(const url of candidates){
+	if(USE_SUPABASE){
 		try{
-			const res = await fetch(url, {cache: 'no-store'})
-			if(!res.ok) continue
+			const res = await supabaseRequest('rpc/increment_visits', {method: 'POST'})
+			if(!res.ok) throw new Error('Supabase visit counter unavailable')
 			const data = await res.json()
-			const visits = Number(data && typeof data.visits === 'number' ? data.visits : 0)
+			const visits = Number(Array.isArray(data) ? data[0] : data) || 0
 			counter.textContent = `Total visits: ${visits.toLocaleString()}`
 			return
 		}catch(err){
-			lastError = err
+			console.error('Failed to load visit count from Supabase:', err)
 		}
 	}
 
-	counter.textContent = 'Total visits: 0'
-	console.error('Failed to load visit count:', lastError)
+	// Local fallback (no backend, e.g. running the plain files without Supabase)
+	try{
+		const raw = localStorage.getItem('simple-blog-visits')
+		const visits = (raw ? Number(raw) || 0 : 0) + 1
+		localStorage.setItem('simple-blog-visits', String(visits))
+		counter.textContent = `Total visits: ${visits.toLocaleString()}`
+	}catch(err){
+		counter.textContent = 'Total visits: 0'
+		console.error('Failed to load visit count:', err)
+	}
 }
 
 async function init(){
