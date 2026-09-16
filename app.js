@@ -575,7 +575,7 @@ async function loadVisitCount(){
 		}
 	}
 
-	counter.textContent = 'Visits: 0'
+	counter.textContent = 'Total visits: 0'
 	console.error('Failed to load visit count:', lastError)
 }
 
