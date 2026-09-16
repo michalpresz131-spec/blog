@@ -552,19 +552,31 @@ function setEditingUI(isEditing, publishBtn, cancelBtn){
 async function loadVisitCount(){
 	const counter = qs('#visitCounter')
 	if(!counter) return
-	const apiUrl = window.location.protocol === 'file:'
-		? 'http://localhost:8000/api/visits'
-		: '/api/visits'
-	try{
-		const res = await fetch(apiUrl)
-		if(!res.ok) throw new Error('Visit counter unavailable')
-		const data = await res.json()
-		const visits = Number(data && data.visits ? data.visits : 0)
-		counter.textContent = `Visits: ${visits.toLocaleString()}`
-	}catch(err){
-		counter.textContent = 'Visits: unavailable'
-		console.error('Failed to load visit count:', err)
+
+	const candidates = []
+	if(window.location.protocol === 'file:'){
+		candidates.push('http://localhost:8000/api/visits')
+		candidates.push('http://127.0.0.1:8000/api/visits')
 	}
+	candidates.push('/api/visits')
+	candidates.push('visits.json')
+
+	let lastError = null
+	for(const url of candidates){
+		try{
+			const res = await fetch(url, {cache: 'no-store'})
+			if(!res.ok) continue
+			const data = await res.json()
+			const visits = Number(data && data.visits ? data.visits : (data.visits === 0 ? 0 : 0))
+			counter.textContent = `Visits: ${visits.toLocaleString()}`
+			return
+		}catch(err){
+			lastError = err
+		}
+	}
+
+	counter.textContent = 'Visits: 0'
+	console.error('Failed to load visit count:', lastError)
 }
 
 async function init(){
