@@ -3,8 +3,10 @@ const path = require('path')
 const fs = require('fs')
 
 const DATA_FILE = path.join(__dirname, 'posts.json')
+const VISITS_FILE = path.join(__dirname, 'visits.json')
 let posts = []
 let nextId = 1
+let visitCount = 0
 
 // Load posts from file
 function loadPosts(){
@@ -30,7 +32,28 @@ function savePosts(){
   }
 }
 
+function loadVisits(){
+  try{
+    if(fs.existsSync(VISITS_FILE)){
+      const data = JSON.parse(fs.readFileSync(VISITS_FILE, 'utf8'))
+      visitCount = Number(data.visits) || 0
+    }
+  }catch(e){
+    console.error('Error loading visits:', e.message)
+    visitCount = 0
+  }
+}
+
+function saveVisits(){
+  try{
+    fs.writeFileSync(VISITS_FILE, JSON.stringify({visits: visitCount}, null, 2))
+  }catch(e){
+    console.error('Error saving visits:', e.message)
+  }
+}
+
 loadPosts()
+loadVisits()
 
 const app = express()
 const PORT = process.env.PORT || 8000
@@ -41,6 +64,13 @@ app.use(express.urlencoded({extended:true}))
 // API: list posts (ascending by date)
 app.get('/api/posts', (req, res)=>{
   res.json(posts.sort((a,b) => new Date(a.date) - new Date(b.date)))
+})
+
+// Visit counter
+app.get('/api/visits', (req, res)=>{
+  visitCount += 1
+  saveVisits()
+  res.json({visits: visitCount})
 })
 
 // create post
