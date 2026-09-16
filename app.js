@@ -549,7 +549,22 @@ function setEditingUI(isEditing, publishBtn, cancelBtn){
 	}
 }
 
+async function loadVisitCount(){
+	const counter = qs('#visitCounter')
+	if(!counter) return
+	try{
+		const res = await fetch('/api/visits')
+		if(!res.ok) throw new Error('Visit counter unavailable')
+		const data = await res.json()
+		const visits = Number(data && data.visits ? data.visits : 0)
+		counter.textContent = `Visits: ${visits.toLocaleString()}`
+	}catch(err){
+		counter.textContent = 'Visits: unavailable'
+	}
+}
+
 async function init(){
+	await loadVisitCount()
 	const form = qs('#postForm')
 	const title = qs('#title')
 	const content = qs('#content')
