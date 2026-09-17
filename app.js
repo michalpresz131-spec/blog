@@ -276,11 +276,13 @@ function showPostViewer(post){
 			<div class="viewer-comments">
 				<div class="comments-title">Comments (${comments.length})</div>
 				<div class="comment-list">${renderCommentList(comments)}</div>
-				<form class="comment-form" data-post-id="${post.id}">
-					<input name="author" type="text" maxlength="60" placeholder="Your name" aria-label="Your name" required>
-					<textarea name="content" rows="3" placeholder="Write a comment..." aria-label="Write a comment" required></textarea>
-					<button type="submit" class="btn alt small-btn">Post comment</button>
-				</form>
+<form class="comment-form" data-post-id="${post.id}">
+	<label for="comment-author-viewer-${post.id}" class="sr-only">Your name</label>
+	<input id="comment-author-viewer-${post.id}" name="author" type="text" maxlength="60" placeholder="Your name" autocomplete="name" required>
+	<label for="comment-content-viewer-${post.id}" class="sr-only">Comment</label>
+	<textarea id="comment-content-viewer-${post.id}" name="content" rows="3" placeholder="Write a comment..." autocomplete="off" required></textarea>
+	<button type="submit" class="btn alt small-btn">Post comment</button>
+</form>
 			</div>
 		</div>
 	`
