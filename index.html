@@ -5,6 +5,17 @@
 	<meta name="viewport" content="width=device-width,initial-scale=1" />
 	<title>Allotment and Gardening AllManiac</title>
 	<link rel="stylesheet" href="style.css?v=20260916-visitor-counter-final">
+	<style>
+		.sr-only {
+			position: absolute;
+			width: 1px; height: 1px;
+			padding: 0; margin: -1px;
+			overflow: hidden;
+			clip: rect(0,0,0,0);
+			white-space: nowrap;
+			border: 0;
+		}
+	</style>
 </head>
 <body>
 	<header class="site-header">
@@ -44,11 +55,11 @@
 			<h2>Create a Post</h2>
 			<form id="postForm">
 				<label for="name">Your name:</label>
-				<input id="name" name="name" type="text" placeholder="Your name" required />
+				<input id="name" name="name" type="text" placeholder="Your name" autocomplete="name" required />
 				<label for="title">Title</label>
-				<input id="title" placeholder="Title" required />
+				<input id="title" name="title" placeholder="Title" autocomplete="off" required />
 				<label for="content">Post content</label>
-				<textarea id="content" placeholder="Write your post..." required></textarea>
+				<textarea id="content" name="content" placeholder="Write your post..." autocomplete="off" required></textarea>
 				<div style="margin:6px 0">
 					<label style="display:block;margin-bottom:6px;font-size:14px">Upload Image (optional)</label>
 					<input id="imageInput" type="file" accept="image/*" />
@@ -74,7 +85,7 @@
 			<button type="button" id="moderationLoginToggle" class="moderation-toggle" onclick="toggleModeratorLogin()">Admin login</button>
 			<form id="moderationLoginForm" class="moderation-login" style="display:none;">
 				<label for="moderationPassword">Moderator password</label>
-				<input id="moderationPassword" type="password" placeholder="Password" autocomplete="off" />
+				<input id="moderationPassword" name="moderationPassword" type="password" placeholder="Password" autocomplete="current-password" />
 				<button type="submit" class="btn alt small-btn">Open moderation</button>
 			</form>
 			<button type="button" id="moderationLogout" class="btn alt small-btn" style="display:none; margin-top: 8px;">Log out</button>
