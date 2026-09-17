@@ -209,7 +209,6 @@ function createPostElement(post){
 	} else if(post.image){
 		imageHtml = `<img data-loaded="true" src="${escapeHtml(post.image)}" loading="lazy" decoding="async" alt="" style="width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:8px;margin-bottom:12px">`
 	}
-	// ...rest of the function stays the same
 	const comments = Array.isArray(post.comments) ? post.comments : []
 	el.innerHTML = `
 		<button type="button" class="post-title">${escapeHtml(post.title)}</button>
@@ -225,14 +224,13 @@ function createPostElement(post){
 		<div class="comments-panel">
 			<div class="comments-title">Comments (${comments.length})</div>
 			<div class="comment-list">${renderCommentList(comments)}</div>
-			
-     <form class="comment-form" data-post-id="${post.id}">
-	<label for="comment-author-card-${post.id}" class="sr-only">Your name</label>
-	<input id="comment-author-card-${post.id}" name="author" type="text" maxlength="60" placeholder="Your name" autocomplete="name" required>
-	<label for="comment-content-card-${post.id}" class="sr-only">Comment</label>
-	<textarea id="comment-content-card-${post.id}" name="content" rows="3" placeholder="Write a comment..." autocomplete="off" required></textarea>
-	<button type="submit" class="btn alt small-btn">Post comment</button>
-       </form>
+			<form class="comment-form" data-post-id="${post.id}">
+				<label for="comment-author-card-${post.id}" class="sr-only">Your name</label>
+				<input id="comment-author-card-${post.id}" name="author" type="text" maxlength="60" placeholder="Your name" autocomplete="name" required>
+				<label for="comment-content-card-${post.id}" class="sr-only">Comment</label>
+				<textarea id="comment-content-card-${post.id}" name="content" rows="3" placeholder="Write a comment..." autocomplete="off" required></textarea>
+				<button type="submit" class="btn alt small-btn">Post comment</button>
+			</form>
 		</div>
 	`
 	return el
@@ -276,13 +274,13 @@ function showPostViewer(post){
 			<div class="viewer-comments">
 				<div class="comments-title">Comments (${comments.length})</div>
 				<div class="comment-list">${renderCommentList(comments)}</div>
-<form class="comment-form" data-post-id="${post.id}">
-	<label for="comment-author-viewer-${post.id}" class="sr-only">Your name</label>
-	<input id="comment-author-viewer-${post.id}" name="author" type="text" maxlength="60" placeholder="Your name" autocomplete="name" required>
-	<label for="comment-content-viewer-${post.id}" class="sr-only">Comment</label>
-	<textarea id="comment-content-viewer-${post.id}" name="content" rows="3" placeholder="Write a comment..." autocomplete="off" required></textarea>
-	<button type="submit" class="btn alt small-btn">Post comment</button>
-</form>
+				<form class="comment-form" data-post-id="${post.id}">
+					<label for="comment-author-viewer-${post.id}" class="sr-only">Your name</label>
+					<input id="comment-author-viewer-${post.id}" name="author" type="text" maxlength="60" placeholder="Your name" autocomplete="name" required>
+					<label for="comment-content-viewer-${post.id}" class="sr-only">Comment</label>
+					<textarea id="comment-content-viewer-${post.id}" name="content" rows="3" placeholder="Write a comment..." autocomplete="off" required></textarea>
+					<button type="submit" class="btn alt small-btn">Post comment</button>
+				</form>
 			</div>
 		</div>
 	`
@@ -326,6 +324,20 @@ async function loadPostImage(img){
 			img.src = data[0].image
 			img.style.display = 'block'
 		}
+	}catch(e){}
+}
+
+function isModeratorLoggedIn(){
+	try{
+		return localStorage.getItem(MODERATOR_SESSION_KEY) === 'true'
+	}catch(e){
+		return false
+	}
+}
+
+function setModeratorLoggedIn(value){
+	try{
+		localStorage.setItem(MODERATOR_SESSION_KEY, value ? 'true' : 'false')
 	}catch(e){}
 }
 
