@@ -120,9 +120,22 @@ async function loadCommentsForPost(postId){
 				.map(normalizeComment)
 		}
 	}
-	return getLocalComments()
-		.filter(c => Number(c.post_id) === Number(postId) && (c.status === 'approved' || !('status' in c)))
-		.map(normalizeComment)
+	if(apiAvailable === false){
+		return getLocalComments()
+			.filter(c => Number(c.post_id) === Number(postId) && (c.status === 'approved' || !('status' in c)))
+			.map(normalizeComment)
+	}
+	try{
+		const res = await fetch(`/api/posts/${postId}/comments`)
+		if(!res.ok) throw new Error('API unavailable')
+		apiAvailable = true
+		return (await res.json()).map(normalizeComment)
+	}catch(e){
+		apiAvailable = false
+		return getLocalComments()
+			.filter(c => Number(c.post_id) === Number(postId) && (c.status === 'approved' || !('status' in c)))
+			.map(normalizeComment)
+	}
 }
 
 async function submitComment(postId, author, content){
@@ -155,6 +168,20 @@ async function submitComment(postId, author, content){
 			})
 			saveLocalComments(comments)
 			return {message: 'Comment saved locally. Supabase moderation is currently unavailable.'}
+		}
+	}
+	if(apiAvailable !== false){
+		try{
+			const res = await fetch(`/api/posts/${postId}/comments`, {
+				method: 'POST',
+				headers: {'Content-Type':'application/json'},
+				body: JSON.stringify({author: trimmedAuthor, content: trimmedContent})
+			})
+			if(!res.ok) throw new Error('API rejected comment')
+			apiAvailable = true
+			return {message: 'Comment posted.'}
+		}catch(e){
+			apiAvailable = false
 		}
 	}
 	const comments = getLocalComments()
