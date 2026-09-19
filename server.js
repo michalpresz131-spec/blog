@@ -1,9 +1,42 @@
 const express = require('express')
 const path = require('path')
 const fs = require('fs')
+const nodemailer = require('nodemailer')
 
 const DATA_FILE = path.join(__dirname, 'posts.json')
 const VISITS_FILE = path.join(__dirname, 'visits.json')
+const COMMENTS_FILE = path.join(__dirname, 'comments.json')
+
+// --- Email notifications (SMTP via Gmail app password) ---
+// Set these as environment variables before starting the server, e.g.:
+//   GMAIL_USER=youraccount@gmail.com
+//   GMAIL_APP_PASSWORD=xxxx xxxx xxxx xxxx   (a 16-char Gmail "App Password", NOT your normal password)
+//   NOTIFY_EMAIL=michalpresz@gmail.com        (optional, defaults to michalpresz@gmail.com)
+const GMAIL_USER = process.env.GMAIL_USER
+const GMAIL_APP_PASSWORD = process.env.GMAIL_APP_PASSWORD
+const NOTIFY_EMAIL = process.env.NOTIFY_EMAIL || 'michalpresz@gmail.com'
+
+let mailTransporter = null
+if(GMAIL_USER && GMAIL_APP_PASSWORD){
+  mailTransporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: { user: GMAIL_USER, pass: GMAIL_APP_PASSWORD }
+  })
+} else {
+  console.warn('Email notifications disabled: set GMAIL_USER and GMAIL_APP_PASSWORD environment variables to enable them.')
+}
+
+function sendNotificationEmail(subject, text){
+  if(!mailTransporter) return
+  mailTransporter.sendMail({
+    from: GMAIL_USER,
+    to: NOTIFY_EMAIL,
+    subject,
+    text
+  }).catch(err => {
+    console.error('Failed to send notification email:', err.message)
+  })
+}
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://bjzeuzhkcfhzalmtnkmz.supabase.co'
 const SUPABASE_KEY = process.env.SUPABASE_KEY || 'sb_publishable_J7P-kMweBzUUJplE_ZgFQA_nIhvIcKD'
 let posts = []
@@ -103,8 +136,34 @@ function saveVisits(){
   }
 }
 
+let comments = []
+let nextCommentId = 1
+
+function loadComments(){
+  try{
+    if(fs.existsSync(COMMENTS_FILE)){
+      const data = JSON.parse(fs.readFileSync(COMMENTS_FILE, 'utf8'))
+      comments = data
+      nextCommentId = Math.max(0, ...comments.map(c=>c.id)) + 1
+    }
+  }catch(e){
+    console.error('Error loading comments:', e.message)
+    comments = []
+    nextCommentId = 1
+  }
+}
+
+function saveComments(){
+  try{
+    fs.writeFileSync(COMMENTS_FILE, JSON.stringify(comments, null, 2))
+  }catch(e){
+    console.error('Error saving comments:', e.message)
+  }
+}
+
 loadPosts()
 loadVisits()
+loadComments()
 
 const app = express()
 const PORT = process.env.PORT || 8000
@@ -150,7 +209,44 @@ app.post('/api/posts', (req, res)=>{
   }
   posts.push(post)
   savePosts()
+  sendNotificationEmail(
+    `New post on Allotment and Gardening AllManiac: ${post.title}`,
+    `A new post was published.\n\nTitle: ${post.title}\n\n${post.content}\n\nPosted: ${post.date}`
+  )
   res.json(post)
+})
+
+// list comments for a post
+app.get('/api/posts/:id/comments', (req, res)=>{
+  const postId = Number(req.params.id)
+  const list = comments
+    .filter(c => c.post_id === postId)
+    .sort((a,b) => new Date(a.date) - new Date(b.date))
+  res.json(list)
+})
+
+// create a comment on a post
+app.post('/api/posts/:id/comments', (req, res)=>{
+  const postId = Number(req.params.id)
+  const post = posts.find(p => p.id === postId)
+  if(!post) return res.status(404).json({error: 'Post not found'})
+  const author = String(req.body.author || '').trim()
+  const content = String(req.body.content || '').trim()
+  if(!author || !content) return res.status(400).json({error: 'Author and content are required'})
+  const comment = {
+    id: nextCommentId++,
+    post_id: postId,
+    author,
+    content,
+    date: new Date().toISOString()
+  }
+  comments.push(comment)
+  saveComments()
+  sendNotificationEmail(
+    `New comment on "${post.title}"`,
+    `${author} commented on "${post.title}":\n\n${content}\n\nPosted: ${comment.date}`
+  )
+  res.json(comment)
 })
 
 // update post
