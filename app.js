@@ -5,7 +5,10 @@ const MODERATOR_SESSION_KEY = 'simple-blog-comment-admin'
 const MODERATOR_PASSWORD = 'allotment-admin'
 const SUPABASE_URL = 'https://bjzeuzhkcfhzalmtnkmz.supabase.co'
 const SUPABASE_KEY = 'sb_publishable_J7P-kMweBzUUJplE_ZgFQA_nIhvIcKD'
-const USE_SUPABASE = window.location.hostname.endsWith('github.io') || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+// Always talk to Supabase directly. This makes the frontend a pure static
+// site with no server-side storage requirement, so it works the same way
+// on GitHub Pages, Vercel, or anywhere else you host the static files.
+const USE_SUPABASE = true
 let apiAvailable = null
 
 function qs(sel){return document.querySelector(sel)}
