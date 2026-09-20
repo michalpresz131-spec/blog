@@ -5,10 +5,8 @@ const MODERATOR_SESSION_KEY = 'simple-blog-comment-admin'
 const MODERATOR_PASSWORD = 'allotment-admin'
 const SUPABASE_URL = 'https://bjzeuzhkcfhzalmtnkmz.supabase.co'
 const SUPABASE_KEY = 'sb_publishable_J7P-kMweBzUUJplE_ZgFQA_nIhvIcKD'
-// Always talk to Supabase directly. This makes the frontend a pure static
-// site with no server-side storage requirement, so it works the same way
-// on GitHub Pages, Vercel, or anywhere else you host the static files.
-const USE_SUPABASE = true
+// Talk to your own server.js API (now backed by SQLite) instead of Supabase.
+const USE_SUPABASE = false
 let apiAvailable = null
 
 function qs(sel){return document.querySelector(sel)}
