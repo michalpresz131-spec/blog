@@ -59,9 +59,9 @@ async function main(){
 
   let visitsTotal = null
   try{
-    const visitsRows = await supabaseGet('site_visits?select=total_visits&order=id.asc&limit=1')
+    const visitsRows = await supabaseGet('site_stats?select=visits&order=id.asc&limit=1')
     if(Array.isArray(visitsRows) && visitsRows.length > 0){
-      visitsTotal = Number(visitsRows[0].total_visits) || 0
+      visitsTotal = Number(visitsRows[0].visits) || 0
       console.log(`Found visit count: ${visitsTotal}.`)
     }
   }catch(e){
