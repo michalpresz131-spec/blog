@@ -1,19 +1,16 @@
-// One-time script: pushes the posts, comments, and visit count already in
-// your local blog.db (which you migrated from Supabase earlier) up into
-// your new Turso database.
-//
-// Requires TURSO_DATABASE_URL and TURSO_AUTH_TOKEN to be set (see
-// TURSO_SETUP.md) and blog.db to already exist locally with your data in it.
+// Step 2 of 2: pushes blog-export.json (written by dump-blog-db-to-json.js)
+// up to your Turso database. This script never touches node:sqlite or any
+// local database file — it only reads JSON and talks to Turso over the
+// network, to avoid the two experimental Node features interfering with
+// each other in the same process.
 //
 //   $env:TURSO_DATABASE_URL="libsql://..."
 //   $env:TURSO_AUTH_TOKEN="ey..."
-//   node push-local-to-turso.js
-//
-// Safe to re-run: it clears posts/comments on Turso and re-inserts from
-// blog.db each time, rather than duplicating.
+//   node dump-blog-db-to-json.js
+//   node push-json-to-turso.js
 
 const path = require('path')
-const { DatabaseSync } = require('node:sqlite')
+const fs = require('fs')
 const { createClient } = require('@libsql/client')
 
 const TURSO_DATABASE_URL = process.env.TURSO_DATABASE_URL
@@ -24,20 +21,17 @@ if(!TURSO_DATABASE_URL || !TURSO_AUTH_TOKEN){
   process.exit(1)
 }
 
-async function main(){
-  const localDb = new DatabaseSync(path.join(__dirname, 'blog.db'))
-  const posts = localDb.prepare('SELECT * FROM posts ORDER BY date ASC').all()
-  const comments = localDb.prepare('SELECT * FROM comments ORDER BY date ASC').all()
-  let visitsTotal = 0
-  try{
-    const row = localDb.prepare('SELECT total FROM visits WHERE id = 1').get()
-    if(row) visitsTotal = Number(row.total) || 0
-  }catch(e){
-    // no visits table locally — fine, defaults to 0
-  }
-  localDb.close()
+console.log('Using TURSO_DATABASE_URL:', TURSO_DATABASE_URL)
+console.log('Using TURSO_AUTH_TOKEN (first 12 chars):', TURSO_AUTH_TOKEN.slice(0, 12) + '...', `(length ${TURSO_AUTH_TOKEN.length})`)
 
-  console.log(`Read from blog.db: ${posts.length} post(s), ${comments.length} comment(s), visits=${visitsTotal}.`)
+async function main(){
+  const exportPath = path.join(__dirname, 'blog-export.json')
+  if(!fs.existsSync(exportPath)){
+    console.error('blog-export.json not found. Run this first: node dump-blog-db-to-json.js')
+    process.exit(1)
+  }
+  const { posts, comments, visits } = JSON.parse(fs.readFileSync(exportPath, 'utf8'))
+  console.log(`Read from blog-export.json: ${posts.length} post(s), ${comments.length} comment(s), visits=${visits}.`)
 
   const turso = createClient({ url: TURSO_DATABASE_URL, authToken: TURSO_AUTH_TOKEN })
 
@@ -92,16 +86,19 @@ async function main(){
 
   const existingVisits = await turso.execute('SELECT total FROM visits WHERE id = 1')
   if(existingVisits.rows.length === 0){
-    await turso.execute({ sql: 'INSERT INTO visits (id, total) VALUES (1, ?)', args: [visitsTotal] })
+    await turso.execute({ sql: 'INSERT INTO visits (id, total) VALUES (1, ?)', args: [visits] })
   } else {
-    await turso.execute({ sql: 'UPDATE visits SET total = ? WHERE id = 1', args: [visitsTotal] })
+    await turso.execute({ sql: 'UPDATE visits SET total = ? WHERE id = 1', args: [visits] })
   }
-  console.log(`Set visit count to ${visitsTotal} on Turso.`)
+  console.log(`Set visit count to ${visits} on Turso.`)
 
   console.log('Done. You can now run: node server.js')
 }
 
 main().catch(err => {
   console.error('Push to Turso failed:', err.message)
+  if(err.cause) console.error('Cause:', err.cause)
+  if(err.code) console.error('Code:', err.code)
+  console.error(err)
   process.exitCode = 1
 })
