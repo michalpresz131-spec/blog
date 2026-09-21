@@ -1,14 +1,12 @@
 # Deploying to Render (free tier)
 
-## Reminder of the trade-off you accepted
+## Good news: the persistence problem is solved
 
-Render's free web services **do not** get a persistent disk. Whenever the
-service spins down from inactivity, gets redeployed, or Render moves it to
-a different machine, the filesystem resets — meaning `blog.db` goes back to
-empty (or to whatever was last committed to your repo, see the tip at the
-bottom). If that becomes a problem later, moving to the $7/mo Starter plan
-with a small persistent disk attached is the fix — nothing else about the
-app needs to change for that upgrade.
+Since `server.js` now stores everything in **Turso** (a hosted database)
+instead of a local `blog.db` file, Render's free-tier lack of a persistent
+disk no longer matters — your data lives on Turso's servers, completely
+independent of Render restarting, redeploying, or spinning down. Make sure
+you've completed `TURSO_SETUP.md` and run `push-local-to-turso.js` first.
 
 ## 1. Get the project into a Git repository
 
@@ -71,6 +69,8 @@ Still on the create-service screen (or afterward, in the service's
 
 | Key | Value |
 |---|---|
+| `TURSO_DATABASE_URL` | `libsql://your-db-name.turso.io` |
+| `TURSO_AUTH_TOKEN` | your Turso auth token |
 | `GMAIL_USER` | `michalpresz131@gmail.com` |
 | `GMAIL_APP_PASSWORD` | your 16-character Gmail App Password |
 | `NOTIFY_EMAIL` | `michalpresz@gmail.com` |
@@ -95,21 +95,3 @@ back up (Render's free-tier cold start) — that's normal, not an error.
 Open the Render URL. If the home page loads but shows no posts, check the
 **Logs** tab in the Render dashboard for errors — that's the equivalent of
 watching your local terminal output.
-
-## Tip: keeping your migrated data as the "reset baseline"
-
-Since free-tier restarts wipe `blog.db` back to whatever's in the deployed
-files, you can make restarts less painful by **committing your already-
-migrated `blog.db`** (the one with your 17 posts and 13 comments) into the
-git repo before pushing:
-
-```powershell
-git add blog.db
-git commit -m "Include migrated data as reset baseline"
-git push
-```
-
-That way, when the free tier resets the filesystem, it resets *to your
-migrated content* rather than to nothing — new posts/comments added after
-that will still get wiped on the next reset, but you won't lose the
-Supabase-migrated backlog every time.
