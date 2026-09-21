@@ -3,7 +3,7 @@
 The blog runs locally with the Express API and uses Supabase for shared moderation when published on GitHub Pages.
 
 ## Moderation
-
+thx
 Hosted visitors can submit posts, but only posts with `status = approved` are displayed publicly. Review submissions in the Supabase Table Editor:
 
 `https://supabase.com/dashboard/project/bjzeuzhkcfhzalmtnkmz/editor`
