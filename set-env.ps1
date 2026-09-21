@@ -13,12 +13,7 @@
 #     node push-json-to-turso.js
 # ============================================================
 
-$env:TURSO_DATABASE_URL   = "PASTE_YOUR_REAL_TURSO_URL_HERE"
-$env:TURSO_AUTH_TOKEN     = "PASTE_YOUR_REAL_TURSO_TOKEN_HERE"
-$env:GMAIL_USER           = "michalpresz131@gmail.com"
-$env:GMAIL_APP_PASSWORD   = "PASTE_YOUR_16_CHAR_APP_PASSWORD_HERE"
-$env:NOTIFY_EMAIL         = "michalpresz@gmail.com"
-$env:PORT                 = "3000"
+
 
 # --- sanity check: prints what actually got set, so typos are ---
 # --- obvious immediately instead of buried in a later error   ---
