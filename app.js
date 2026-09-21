@@ -3,35 +3,11 @@ const LOCAL_POSTS_KEY = 'simple-blog-posts'
 const LOCAL_COMMENTS_KEY = 'simple-blog-comments'
 const MODERATOR_SESSION_KEY = 'simple-blog-comment-admin'
 const MODERATOR_PASSWORD = 'allotment-admin'
-const SUPABASE_URL = 'https://bjzeuzhkcfhzalmtnkmz.supabase.co'
-const SUPABASE_KEY = 'sb_publishable_J7P-kMweBzUUJplE_ZgFQA_nIhvIcKD'
-// Talk to your own server.js API (now backed by SQLite) instead of Supabase.
-const USE_SUPABASE = false
 let apiAvailable = null
 
 function qs(sel){return document.querySelector(sel)}
 
-async function supabaseRequest(path, options = {}){
-	return fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
-		...options,
-		headers: {
-			apikey: SUPABASE_KEY,
-			Authorization: `Bearer ${SUPABASE_KEY}`,
-			'Content-Type': 'application/json',
-			Prefer: 'return=representation',
-			...(options.headers || {})
-		}
-	})
-}
-
 async function loadPosts(){
-	if(USE_SUPABASE){
-		try{
-			const res = await supabaseRequest('posts?select=id,title,content,date,likes&status=eq.approved&order=date.asc')
-			if(!res.ok) throw new Error('Supabase unavailable')
-			return await res.json()
-		}catch(e){return loadLocalPosts()}
-	}
 	if(apiAvailable === false){
 		return loadLocalPosts()
 	}
@@ -110,17 +86,6 @@ function renderCommentList(comments){
 }
 
 async function loadCommentsForPost(postId){
-	if(USE_SUPABASE){
-		try{
-			const res = await supabaseRequest(`comments?select=id,post_id,author,content,date,status&post_id=eq.${postId}&status=eq.approved&order=date.asc`)
-			if(!res.ok) throw new Error('Supabase comments unavailable')
-			return (await res.json()).map(normalizeComment)
-		}catch(e){
-			return getLocalComments()
-				.filter(c => Number(c.post_id) === Number(postId) && (c.status === 'approved' || !('status' in c)))
-				.map(normalizeComment)
-		}
-	}
 	if(apiAvailable === false){
 		return getLocalComments()
 			.filter(c => Number(c.post_id) === Number(postId) && (c.status === 'approved' || !('status' in c)))
@@ -143,34 +108,6 @@ async function submitComment(postId, author, content){
 	const trimmedAuthor = String(author || '').trim()
 	const trimmedContent = String(content || '').trim()
 	if(!trimmedAuthor || !trimmedContent) return null
-	if(USE_SUPABASE){
-		try{
-			const res = await supabaseRequest('comments', {
-				method: 'POST',
-				body: JSON.stringify({
-					post_id: Number(postId),
-					author: trimmedAuthor,
-					content: trimmedContent,
-					date: new Date().toISOString(),
-					status: 'pending'
-				})
-			})
-			if(!res.ok) throw new Error('Supabase rejected the new comment')
-			return {message: 'Your comment was submitted for moderation.'}
-		}catch(e){
-			const comments = getLocalComments()
-			comments.push({
-				id: Date.now(),
-				post_id: Number(postId),
-				author: trimmedAuthor,
-				content: trimmedContent,
-				date: new Date().toISOString(),
-				status: 'pending'
-			})
-			saveLocalComments(comments)
-			return {message: 'Comment saved locally. Supabase moderation is currently unavailable.'}
-		}
-	}
 	if(apiAvailable !== false){
 		try{
 			const res = await fetch(`/api/posts/${postId}/comments`, {
@@ -199,27 +136,10 @@ async function submitComment(postId, author, content){
 }
 
 async function loadPendingComments(){
-	if(USE_SUPABASE){
-		try{
-			const res = await supabaseRequest('comments?select=id,post_id,author,content,date,status&status=eq.pending&order=date.asc')
-			if(!res.ok) throw new Error('Unable to load moderation queue')
-			return (await res.json()).map(normalizeComment)
-		}catch(e){
-			return getLocalComments().filter(c => c.status === 'pending').map(normalizeComment)
-		}
-	}
 	return getLocalComments().filter(c => c.status === 'pending').map(normalizeComment)
 }
 
 async function updateCommentStatus(id, status){
-	if(USE_SUPABASE){
-		const res = await supabaseRequest(`comments?id=eq.${id}`, {
-			method: 'PATCH',
-			body: JSON.stringify({status})
-		})
-		if(!res.ok) throw new Error('Unable to update comment status')
-		return true
-	}
 	const comments = getLocalComments()
 	const comment = comments.find(c => Number(c.id) === Number(id))
 	if(!comment) return false
@@ -232,9 +152,7 @@ function createPostElement(post){
 	const el = document.createElement('article')
 	el.className = 'post'
 	let imageHtml = ''
-	if(USE_SUPABASE){
-		imageHtml = `<img data-image-id="${post.id}" loading="lazy" decoding="async" alt="" style="display:none;width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:8px;margin-bottom:12px">`
-	} else if(post.image){
+	if(post.image){
 		imageHtml = `<img data-loaded="true" src="${escapeHtml(post.image)}" loading="lazy" decoding="async" alt="" style="width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:8px;margin-bottom:12px">`
 	}
 	const comments = Array.isArray(post.comments) ? post.comments : []
@@ -246,8 +164,8 @@ function createPostElement(post){
 		<div class="actions">
 			<button data-id="${post.id}" class="btn alt like">👍 ${post.likes || 0}</button>
 			<button data-id="${post.id}" class="btn alt view">View</button>
-			${USE_SUPABASE ? '' : `<button data-id="${post.id}" class="btn alt edit">Edit</button>
-			<button data-id="${post.id}" class="btn alt delete">Delete</button>`}
+			<button data-id="${post.id}" class="btn alt edit">Edit</button>
+			<button data-id="${post.id}" class="btn alt delete">Delete</button>
 		</div>
 		<div class="comments-panel">
 			<div class="comments-title">Comments (${comments.length})</div>
@@ -341,20 +259,6 @@ function showPostViewer(post){
 	}
 }
 
-async function loadPostImage(img){
-	if(!USE_SUPABASE || img.dataset.loaded) return
-	img.dataset.loaded = 'true'
-	try{
-		const res = await supabaseRequest(`posts?id=eq.${img.dataset.imageId}&select=image`)
-		if(!res.ok) return
-		const data = await res.json()
-		if(data[0] && data[0].image){
-			img.src = data[0].image
-			img.style.display = 'block'
-		}
-	}catch(e){}
-}
-
 function isModeratorLoggedIn(){
 	try{
 		return localStorage.getItem(MODERATOR_SESSION_KEY) === 'true'
@@ -437,29 +341,10 @@ async function render(){
 		return post
 	}))
 	withComments.slice().reverse().forEach(p=>postsEl.appendChild(createPostElement(p)))
-	if(USE_SUPABASE){
-		await Promise.all(Array.from(postsEl.querySelectorAll('[data-image-id]'), loadPostImage))
-	}
 	await renderModerationQueue()
 }
 
 async function addPost(title, content, image){
-	if(USE_SUPABASE){
-		const res = await supabaseRequest('posts', {
-			method: 'POST',
-			body: JSON.stringify({
-				title,
-				content,
-				image: image || null,
-				date: new Date().toISOString(),
-				likes: 0,
-				status: 'pending'
-			})
-		})
-		if(!res.ok) throw new Error('Unable to submit post')
-		await render()
-		return
-	}
 	if(apiAvailable === false){
 		const posts = await loadLocalPosts()
 		posts.push({id: Date.now(), title, content, image: image || null, date: new Date().toISOString(), likes: 0})
@@ -476,7 +361,6 @@ async function addPost(title, content, image){
 }
 
 async function updatePost(id, title, content, image){
-	if(USE_SUPABASE) return
 	if(apiAvailable === false){
 		const posts = await loadLocalPosts()
 		const post = posts.find(p=>p.id === id)
@@ -494,7 +378,6 @@ async function updatePost(id, title, content, image){
 }
 
 async function deletePost(id){
-	if(USE_SUPABASE) return
 	if(apiAvailable === false){
 		const posts = await loadLocalPosts()
 		saveLocalPosts(posts.filter(p=>p.id !== id))
@@ -526,22 +409,6 @@ function importPostsFile(file){
 			if(!Array.isArray(data)) throw new Error('Invalid format')
 			const ok = data.every(p=>p && typeof p.title === 'string' && typeof p.content === 'string')
 			if(!ok) throw new Error('Invalid entries')
-			if(USE_SUPABASE){
-				const res = await supabaseRequest('posts', {
-					method: 'POST',
-					body: JSON.stringify(data.map(p=>({
-						title: p.title,
-						content: p.content,
-						image: p.image || null,
-						date: p.date || new Date().toISOString(),
-						likes: p.likes || 0,
-						status: 'pending'
-					})))
-				})
-				if(!res.ok) throw new Error('Unable to import posts')
-				await render()
-				return
-			}
 			if(apiAvailable === false){
 				saveLocalPosts(data)
 				await render()
@@ -585,20 +452,18 @@ async function loadVisitCount(){
 	const counter = qs('#visitCounter')
 	if(!counter) return
 
-	if(USE_SUPABASE){
-		try{
-			const res = await supabaseRequest('rpc/increment_visits', {method: 'POST'})
-			if(!res.ok) throw new Error('Supabase visit counter unavailable')
-			const data = await res.json()
-			const visits = Number(Array.isArray(data) ? data[0] : data) || 0
-			counter.textContent = `Total visits: ${visits.toLocaleString()}`
-			return
-		}catch(err){
-			console.error('Failed to load visit count from Supabase:', err)
-		}
+	try{
+		const res = await fetch('/api/visits')
+		if(!res.ok) throw new Error('API unavailable')
+		const data = await res.json()
+		const visits = Number(data.visits) || 0
+		counter.textContent = `Total visits: ${visits.toLocaleString()}`
+		return
+	}catch(err){
+		console.error('Failed to load visit count from server:', err)
 	}
 
-	// Local fallback (no backend, e.g. running the plain files without Supabase)
+	// Local fallback (server unreachable)
 	try{
 		const raw = localStorage.getItem('simple-blog-visits')
 		const visits = (raw ? Number(raw) || 0 : 0) + 1
@@ -674,7 +539,6 @@ async function init(){
 			setEditingUI(false, publishBtn, cancelBtn)
 		} else {
 			await addPost(title.value.trim(), content.value.trim(), currentImage)
-			if(USE_SUPABASE) alert('Your post was submitted for moderation.')
 		}
 		form.reset()
 		imageInput.value = ''
@@ -724,16 +588,9 @@ async function init(){
 		const el = e.target
 		const postEl = el.closest('.post')
 		if(postEl && el.closest('.post-title')){
-			const image = postEl.querySelector('[data-image-id]')
-			const localImage = image || postEl.querySelector('img')
+			const localImage = postEl.querySelector('img')
 			if(localImage){
-				if(localImage.style.display === 'block'){
-					localImage.style.display = 'none'
-				} else if(USE_SUPABASE && !localImage.dataset.loaded){
-					await loadPostImage(localImage)
-				} else {
-					localImage.style.display = 'block'
-				}
+				localImage.style.display = localImage.style.display === 'none' ? 'block' : 'none'
 			}
 		}
 		const id = Number(el.dataset.id)
@@ -751,18 +608,6 @@ async function init(){
 		} else if(el.classList.contains('like')){
 			if(!isNaN(id)){
 				try{
-					if(USE_SUPABASE){
-						const posts = await loadPosts()
-						const post = posts.find(p=>p.id === id)
-						if(!post) return
-						const nextLikes = (post.likes || 0) + 1
-						const res = await supabaseRequest(`posts?id=eq.${id}`, {
-							method: 'PATCH',
-							body: JSON.stringify({likes: nextLikes})
-						})
-						if(res.ok) el.textContent = `👍 ${nextLikes}`
-						return
-					}
 					if(apiAvailable === false){
 						const posts = await loadLocalPosts()
 						const post = posts.find(p=>p.id === id)
@@ -883,8 +728,7 @@ async function init(){
 
 	const current = await loadPosts()
 	if(!current || current.length === 0){
-		if(USE_SUPABASE) await render()
-		else await addPost('Welcome','This is your first post. Edit or delete it, or create new posts using the form above.')
+		await addPost('Welcome','This is your first post. Edit or delete it, or create new posts using the form above.')
 	} else {
 		await render()
 	}
