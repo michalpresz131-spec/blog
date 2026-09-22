@@ -1,28 +1,41 @@
 # ============================================================
-# Edit the values below (between the quotes), save this file,
-# then load them into your terminal with:
+# EDIT THE 5 LINES BELOW (between the quotes), save, then load
+# them into your terminal with:
 #
 #     . .\set-env.ps1
 #
-# (that's a dot, a space, then the path — it "dot-sources" the
-# file so the variables stick around in your current window)
-#
-# Do this once per new PowerShell window, before running:
-#     node server.js
-#   or
-#     node push-json-to-turso.js
+# (a dot, a space, then the path)
 # ============================================================
 
+$env:TURSO_DATABASE_URL   = "libsql://allotment-blog-michalpresz131-spec.aws-eu-west-1.turso.io"
+$env:TURSO_AUTH_TOKEN     = "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3ODk5OTI5ODYsImlkIjoiMDFhMGMzZTQtMjIwMS03NDk2LTkxZWQtOTk0ODZlZGFmMjYyIiwia2lkIjoiYzhod2poMmxabzVJNHlSODQ2QjFvLTAzcUxLRTNtY1hQakkwTHpoSDZRQSIsInJpZCI6Ijk2OGNjOGY2LTE3NTItNDhkYS1hZTFlLTkwMzBiYTY3MGViMSJ9.xrkp5ZTamgLRpL9LG5DLJ1PTXhJJCpW2d1yLUQMD57bER4lYRGpx3jte9lqNOtPd4drfryg6-FXW45uYareiDw"
+$env:GMAIL_USER           = "michalpresz131@gmail.com"
+$env:GMAIL_APP_PASSWORD   = "gjhy zwun przx nksz"
+$env:NOTIFY_EMAIL         = "michalpresz131@gmail.com"
+$env:PORT                 = "3000"
 
+# ============================================================
+# Nothing below this line needs editing.
+# ============================================================
 
-# --- sanity check: prints what actually got set, so typos are ---
-# --- obvious immediately instead of buried in a later error   ---
+function Show-EnvValue($name, $value, $previewChars){
+    if([string]::IsNullOrEmpty($value)){
+        Write-Host "  $name = *** NOT SET / BLANK ***" -ForegroundColor Red
+        return
+    }
+    if($value.Length -le $previewChars){
+        Write-Host "  $name = $value (length $($value.Length))"
+    } else {
+        Write-Host "  $name = $($value.Substring(0,$previewChars))... (length $($value.Length))"
+    }
+}
+
 Write-Host ""
 Write-Host "Environment variables loaded:"
 Write-Host "  TURSO_DATABASE_URL = $env:TURSO_DATABASE_URL"
-Write-Host "  TURSO_AUTH_TOKEN   = $($env:TURSO_AUTH_TOKEN.Substring(0, [Math]::Min(12,$env:TURSO_AUTH_TOKEN.Length)))... (length $($env:TURSO_AUTH_TOKEN.Length))"
-Write-Host "  GMAIL_USER         = $env:GMAIL_USER"
-Write-Host "  GMAIL_APP_PASSWORD = $($env:GMAIL_APP_PASSWORD.Substring(0, [Math]::Min(4,$env:GMAIL_APP_PASSWORD.Length)))... (length $($env:GMAIL_APP_PASSWORD.Length))"
-Write-Host "  NOTIFY_EMAIL       = $env:NOTIFY_EMAIL"
-Write-Host "  PORT               = $env:PORT"
+Show-EnvValue "TURSO_AUTH_TOKEN  " $env:TURSO_AUTH_TOKEN 12
+Write-Host "  GMAIL_USER          = $env:GMAIL_USER"
+Show-EnvValue "GMAIL_APP_PASSWORD" $env:GMAIL_APP_PASSWORD 4
+Write-Host "  NOTIFY_EMAIL        = $env:NOTIFY_EMAIL"
+Write-Host "  PORT                = $env:PORT"
 Write-Host ""
