@@ -1,15 +1,27 @@
+// Allotment and Gardening AllManiac — server
+// Serves the static site and a small JSON API backed by Turso (a hosted,
+// SQLite-compatible database). Also emails michalpresz@gmail.com whenever
+// a new post or comment is created.
+
 const express = require('express')
 const path = require('path')
+const fs = require('fs')
 const { createClient } = require('@libsql/client')
 const nodemailer = require('nodemailer')
 
+console.log('Starting server. Script directory (__dirname):', __dirname)
+
 // --- Turso (hosted, SQLite-compatible database) ---
-// Set these as environment variables — see TURSO_SETUP.md
+// Required environment variables — see TURSO_SETUP.md:
+//   TURSO_DATABASE_URL
+//   TURSO_AUTH_TOKEN
 const TURSO_DATABASE_URL = process.env.TURSO_DATABASE_URL
 const TURSO_AUTH_TOKEN = process.env.TURSO_AUTH_TOKEN
 
 if(!TURSO_DATABASE_URL || !TURSO_AUTH_TOKEN){
-  console.error('Missing TURSO_DATABASE_URL and/or TURSO_AUTH_TOKEN environment variables. See TURSO_SETUP.md.')
+  console.error('FATAL: TURSO_DATABASE_URL and/or TURSO_AUTH_TOKEN are not set.')
+  console.error('Run ". .\\set-env.ps1" in this terminal window first, then re-run "node server.js".')
+  process.exit(1)
 }
 
 const db = createClient({
@@ -18,10 +30,8 @@ const db = createClient({
 })
 
 // --- Email notifications (SMTP via Gmail app password) ---
-// Set these as environment variables before starting the server, e.g.:
-//   GMAIL_USER=youraccount@gmail.com
-//   GMAIL_APP_PASSWORD=xxxx xxxx xxxx xxxx   (a 16-char Gmail "App Password", NOT your normal password)
-//   NOTIFY_EMAIL=michalpresz@gmail.com        (optional, defaults to michalpresz@gmail.com)
+// Optional environment variables:
+//   GMAIL_USER, GMAIL_APP_PASSWORD, NOTIFY_EMAIL (defaults to michalpresz@gmail.com)
 const GMAIL_USER = process.env.GMAIL_USER
 const GMAIL_APP_PASSWORD = process.env.GMAIL_APP_PASSWORD
 const NOTIFY_EMAIL = process.env.NOTIFY_EMAIL || 'michalpresz@gmail.com'
@@ -32,20 +42,15 @@ if(GMAIL_USER && GMAIL_APP_PASSWORD){
     service: 'gmail',
     auth: { user: GMAIL_USER, pass: GMAIL_APP_PASSWORD }
   })
+  console.log('Email notifications: enabled (sending to', NOTIFY_EMAIL + ')')
 } else {
-  console.warn('Email notifications disabled: set GMAIL_USER and GMAIL_APP_PASSWORD environment variables to enable them.')
+  console.warn('Email notifications: disabled (GMAIL_USER / GMAIL_APP_PASSWORD not set)')
 }
 
 function sendNotificationEmail(subject, text){
   if(!mailTransporter) return
-  mailTransporter.sendMail({
-    from: GMAIL_USER,
-    to: NOTIFY_EMAIL,
-    subject,
-    text
-  }).catch(err => {
-    console.error('Failed to send notification email:', err.message)
-  })
+  mailTransporter.sendMail({ from: GMAIL_USER, to: NOTIFY_EMAIL, subject, text })
+    .catch(err => console.error('Failed to send notification email:', err.message))
 }
 
 // --- Database setup ---
@@ -74,14 +79,14 @@ async function initDb(){
 
   const existingVisitsRow = await db.execute('SELECT total FROM visits WHERE id = 1')
   if(existingVisitsRow.rows.length === 0){
-    await db.execute({ sql: 'INSERT INTO visits (id, total) VALUES (1, 0)' })
+    await db.execute('INSERT INTO visits (id, total) VALUES (1, 0)')
   }
 }
 
+// --- Express app ---
 const app = express()
-const { clerkMiddleware } = require("@clerk/express");
-app.use(clerkMiddleware());
 const PORT = process.env.PORT || 8000
+const PUBLIC_DIR = __dirname
 
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*')
@@ -94,30 +99,29 @@ app.use((req, res, next) => {
 app.use(express.json({limit: '12mb'}))
 app.use(express.urlencoded({extended:true}))
 
-// API: list posts (ascending by date)
+// ---------- API ----------
+
 app.get('/api/posts', async (req, res)=>{
   try{
     const result = await db.execute('SELECT * FROM posts ORDER BY date ASC')
     res.json(result.rows)
   }catch(e){
-    console.error('Failed to load posts:', e.message)
+    console.error('GET /api/posts failed:', e.message)
     res.status(500).json({error: 'Database error'})
   }
 })
 
-// Visit counter
 app.get('/api/visits', async (req, res)=>{
   try{
     await db.execute('UPDATE visits SET total = total + 1 WHERE id = 1')
     const row = await db.execute('SELECT total FROM visits WHERE id = 1')
     res.json({visits: Number(row.rows[0]?.total) || 0})
   }catch(e){
-    console.error('Failed to update visits:', e.message)
+    console.error('GET /api/visits failed:', e.message)
     res.status(500).json({error: 'Database error'})
   }
 })
 
-// create post
 app.post('/api/posts', async (req, res)=>{
   const {title, content, image} = req.body
   const date = new Date().toISOString()
@@ -126,10 +130,7 @@ app.post('/api/posts', async (req, res)=>{
       sql: 'INSERT INTO posts (title, content, image, date, likes) VALUES (?, ?, ?, ?, 0)',
       args: [title || '', content || '', image || null, date]
     })
-    const row = await db.execute({
-      sql: 'SELECT * FROM posts WHERE id = ?',
-      args: [Number(info.lastInsertRowid)]
-    })
+    const row = await db.execute({ sql: 'SELECT * FROM posts WHERE id = ?', args: [Number(info.lastInsertRowid)] })
     const post = row.rows[0]
     sendNotificationEmail(
       `New post on Allotment and Gardening AllManiac: ${post.title}`,
@@ -137,12 +138,11 @@ app.post('/api/posts', async (req, res)=>{
     )
     res.json(post)
   }catch(e){
-    console.error('Failed to create post:', e.message)
+    console.error('POST /api/posts failed:', e.message)
     res.status(500).json({error: 'Database error'})
   }
 })
 
-// update post
 app.put('/api/posts/:id', async (req, res)=>{
   const id = Number(req.params.id)
   const {title, content, image} = req.body
@@ -157,12 +157,11 @@ app.put('/api/posts/:id', async (req, res)=>{
     const row = await db.execute({ sql: 'SELECT * FROM posts WHERE id = ?', args: [id] })
     res.json(row.rows[0])
   }catch(e){
-    console.error('Failed to update post:', e.message)
+    console.error('PUT /api/posts/:id failed:', e.message)
     res.status(500).json({error: 'Database error'})
   }
 })
 
-// delete post
 app.delete('/api/posts/:id', async (req,res)=>{
   const id = Number(req.params.id)
   try{
@@ -174,12 +173,11 @@ app.delete('/api/posts/:id', async (req,res)=>{
     ], 'write')
     res.json({success:true})
   }catch(e){
-    console.error('Failed to delete post:', e.message)
+    console.error('DELETE /api/posts/:id failed:', e.message)
     res.status(500).json({error: 'Database error'})
   }
 })
 
-// import (replace all posts)
 app.post('/api/import', async (req, res)=>{
   const data = req.body
   if(!Array.isArray(data)) return res.status(400).json({error:'Expected array'})
@@ -194,12 +192,11 @@ app.post('/api/import', async (req, res)=>{
     }
     res.json({success:true})
   }catch(e){
-    console.error('Failed to import posts:', e.message)
+    console.error('POST /api/import failed:', e.message)
     res.status(500).json({error: 'Database error'})
   }
 })
 
-// like/unlike post
 app.post('/api/posts/:id/like', async (req, res)=>{
   const id = Number(req.params.id)
   try{
@@ -209,27 +206,22 @@ app.post('/api/posts/:id/like', async (req, res)=>{
     const row = await db.execute({ sql: 'SELECT likes FROM posts WHERE id = ?', args: [id] })
     res.json({likes: Number(row.rows[0].likes)})
   }catch(e){
-    console.error('Failed to like post:', e.message)
+    console.error('POST /api/posts/:id/like failed:', e.message)
     res.status(500).json({error: 'Database error'})
   }
 })
 
-// list comments for a post
 app.get('/api/posts/:id/comments', async (req, res)=>{
   const postId = Number(req.params.id)
   try{
-    const result = await db.execute({
-      sql: 'SELECT * FROM comments WHERE post_id = ? ORDER BY date ASC',
-      args: [postId]
-    })
+    const result = await db.execute({ sql: 'SELECT * FROM comments WHERE post_id = ? ORDER BY date ASC', args: [postId] })
     res.json(result.rows)
   }catch(e){
-    console.error('Failed to load comments:', e.message)
+    console.error('GET /api/posts/:id/comments failed:', e.message)
     res.status(500).json({error: 'Database error'})
   }
 })
 
-// create a comment on a post
 app.post('/api/posts/:id/comments', async (req, res)=>{
   const postId = Number(req.params.id)
   try{
@@ -244,10 +236,7 @@ app.post('/api/posts/:id/comments', async (req, res)=>{
       sql: 'INSERT INTO comments (post_id, author, content, date) VALUES (?, ?, ?, ?)',
       args: [postId, author, content, date]
     })
-    const row = await db.execute({
-      sql: 'SELECT * FROM comments WHERE id = ?',
-      args: [Number(info.lastInsertRowid)]
-    })
+    const row = await db.execute({ sql: 'SELECT * FROM comments WHERE id = ?', args: [Number(info.lastInsertRowid)] })
     const comment = row.rows[0]
     sendNotificationEmail(
       `New comment on "${post.title}"`,
@@ -255,13 +244,28 @@ app.post('/api/posts/:id/comments', async (req, res)=>{
     )
     res.json(comment)
   }catch(e){
-    console.error('Failed to create comment:', e.message)
+    console.error('POST /api/posts/:id/comments failed:', e.message)
     res.status(500).json({error: 'Database error'})
   }
 })
 
-// serve static files
-app.use(express.static(path.join(__dirname)))
+// ---------- Static site ----------
+
+app.use(express.static(PUBLIC_DIR))
+
+// Explicit fallback for "/" in case static index resolution ever fails —
+// this guarantees index.html is served for the root path as long as the
+// file physically exists next to server.js.
+app.get('/', (req, res)=>{
+  const indexPath = path.join(PUBLIC_DIR, 'index.html')
+  if(fs.existsSync(indexPath)){
+    res.sendFile(indexPath)
+  } else {
+    res.status(500).send(`index.html not found in ${PUBLIC_DIR}. Make sure it is in the same folder as server.js.`)
+  }
+})
+
+// ---------- Startup ----------
 
 initDb()
   .then(() => {
