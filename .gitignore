@@ -5,3 +5,4 @@ db.sqlite
 .env.*
 !.env.example
 *.log
+set-env.ps1
