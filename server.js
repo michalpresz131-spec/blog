@@ -79,6 +79,8 @@ async function initDb(){
 }
 
 const app = express()
+const { clerkMiddleware } = require("@clerk/express");
+app.use(clerkMiddleware());
 const PORT = process.env.PORT || 8000
 
 app.use((req, res, next) => {
