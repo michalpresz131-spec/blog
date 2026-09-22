@@ -8,7 +8,7 @@
 # ============================================================
 
 $env:TURSO_DATABASE_URL   = "libsql://allotment-blog-michalpresz131-spec.aws-eu-west-1.turso.io"
-$env:TURSO_AUTH_TOKEN     = "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3ODk5OTI5ODYsImlkIjoiMDFhMGMzZTQtMjIwMS03NDk2LTkxZWQtOTk0ODZlZGFmMjYyIiwia2lkIjoiYzhod2poMmxabzVJNHlSODQ2QjFvLTAzcUxLRTNtY1hQakkwTHpoSDZRQSIsInJpZCI6Ijk2OGNjOGY2LTE3NTItNDhkYS1hZTFlLTkwMzBiYTY3MGViMSJ9.xrkp5ZTamgLRpL9LG5DLJ1PTXhJJCpW2d1yLUQMD57bER4lYRGpx3jte9lqNOtPd4drfryg6-FXW45uYareiDw"
+$env:TURSO_AUTH_TOKEN     = "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3OTAwODcxMTIsImlkIjoiMDFhMGM0NWQtYjYwMS03ZTZlLWI1YTEtZmQ3YjU1NDVkMGRmIiwia2lkIjoiYzhod2poMmxabzVJNHlSODQ2QjFvLTAzcUxLRTNtY1hQakkwTHpoSDZRQSIsInJpZCI6IjVkOGViMjRmLWZiMzQtNGRkMy05ZmI5LTA4ZWU2ZjE5YWQ0MiJ9.V3lUhQTF_CP-GeCBIs4zmr_vdSmgEfZOq2cJs0htExDT4uqKCmebJ6r4ctzeeWjMnhjasJr0QsW65vq7Rb-xBg"
 $env:GMAIL_USER           = "michalpresz131@gmail.com"
 $env:GMAIL_APP_PASSWORD   = "gjhy zwun przx nksz"
 $env:NOTIFY_EMAIL         = "michalpresz131@gmail.com"
