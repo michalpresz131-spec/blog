@@ -1,8 +1,6 @@
 const DRAFT_KEY = 'simple-blog-draft'
 const LOCAL_POSTS_KEY = 'simple-blog-posts'
 const LOCAL_COMMENTS_KEY = 'simple-blog-comments'
-
- '
 let apiAvailable = null
 
 function qs(sel){return document.querySelector(sel)}
