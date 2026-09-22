@@ -7,3 +7,4 @@ db.sqlite
 *.log
 set-env.ps1
 TURSO_SETUP.md
+blog.db
