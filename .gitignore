@@ -6,3 +6,4 @@ db.sqlite
 !.env.example
 *.log
 set-env.ps1
+TURSO_SETUP.md
