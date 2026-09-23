@@ -11,3 +11,4 @@ blog.db
 VERCEL_TURSO_DEPLOY.md
 .vercel
 .env*
+.env.local
