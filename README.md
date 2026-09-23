@@ -6,7 +6,6 @@ The blog runs locally with the Express API and uses Supabase for shared moderati
 thx
 Hosted visitors can submit posts, but only posts with `status = approved` are displayed publicly. Review submissions in the Supabase Table Editor:
 
-`https://supabase.com/dashboard/project/bjzeuzhkcfhzalmtnkmz/editor`
 
 Change a row's `status` from `pending` to `approved` to publish it, or `rejected` to keep it hidden. The table and row-level security policies are already configured in the `AllotmentMentality` project.
 
