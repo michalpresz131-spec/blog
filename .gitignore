@@ -12,3 +12,6 @@ VERCEL_TURSO_DEPLOY.md
 .vercel
 .env*
 .env.local
+
+# Local Netlify folder
+.netlify

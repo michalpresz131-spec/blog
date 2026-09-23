@@ -13,7 +13,7 @@ $env:GMAIL_USER           = "michalpresz131@gmail.com"
 $env:GMAIL_APP_PASSWORD   = "snei mpim ntym niac"
 $env:NOTIFY_EMAIL         = "michalpresz131@gmail.com"
 $env:PORT                 = "3000"
-
+NETLIFY_AUTH_TOKEN        = nfp_j2kRLANQ5LcQkb9M4bbVxvxNAx9sJUSAcfc6
 # ============================================================
 # Nothing below this line needs editing.
 # ============================================================
