@@ -8,3 +8,6 @@ db.sqlite
 set-env.ps1
 TURSO_SETUP.md
 blog.db
+VERCEL_TURSO_DEPLOY.md
+.vercel
+.env*
