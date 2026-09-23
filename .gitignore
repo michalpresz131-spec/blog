@@ -5,7 +5,7 @@ db.sqlite
 .env.*
 !.env.example
 *.log
-set-env.env
+set-env.ps1
 TURSO_SETUP.md
 blog.db
 VERCEL_TURSO_DEPLOY.md
