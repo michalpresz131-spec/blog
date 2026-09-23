@@ -20,8 +20,11 @@ const TURSO_AUTH_TOKEN = process.env.TURSO_AUTH_TOKEN
 
 if(!TURSO_DATABASE_URL || !TURSO_AUTH_TOKEN){
   console.error('FATAL: TURSO_DATABASE_URL and/or TURSO_AUTH_TOKEN are not set.')
-  console.error('Run ". .\\set-env.ps1" in this terminal window first, then re-run "node server.js".')
-  process.exit(1)
+  console.error('Locally: run ". .\\set-env.ps1" in this terminal window first, then re-run "node server.js".')
+  console.error('On Vercel/Render: set them in the platform\'s Environment Variables settings.')
+  if(require.main === module){
+    process.exit(1)
+  }
 }
 
 const db = createClient({
@@ -54,6 +57,22 @@ function sendNotificationEmail(subject, text){
 }
 
 // --- Database setup ---
+// initDb() is idempotent (CREATE TABLE IF NOT EXISTS), so it's safe to run
+// it lazily on the first incoming request rather than only at startup.
+// This matters for serverless platforms (like Vercel), where there is no
+// long-lived "startup" moment — each cold start needs this to run once
+// before handling its first request.
+let dbReady = false
+let dbReadyPromise = null
+
+function ensureDbReady(){
+  if(dbReady) return Promise.resolve()
+  if(!dbReadyPromise){
+    dbReadyPromise = initDb().then(() => { dbReady = true })
+  }
+  return dbReadyPromise
+}
+
 async function initDb(){
   await db.batch([
     `CREATE TABLE IF NOT EXISTS posts (
@@ -98,6 +117,16 @@ app.use((req, res, next) => {
 
 app.use(express.json({limit: '12mb'}))
 app.use(express.urlencoded({extended:true}))
+
+app.use(async (req, res, next) => {
+  try{
+    await ensureDbReady()
+    next()
+  }catch(e){
+    console.error('Database initialization failed:', e.message)
+    res.status(500).json({error: 'Database initialization failed'})
+  }
+})
 
 // ---------- API ----------
 
@@ -266,14 +295,22 @@ app.get('/', (req, res)=>{
 })
 
 // ---------- Startup ----------
-
-initDb()
-  .then(() => {
-    app.listen(PORT, ()=>{
-      console.log(`Server listening on http://localhost:${PORT}/`)
+// When run directly (`node server.js`), start a normal always-on server.
+// When imported as a module (e.g. by Vercel's serverless runtime via
+// api/index.js), just export the Express app — the platform handles
+// invoking it per-request instead.
+if(require.main === module){
+  initDb()
+    .then(() => {
+      dbReady = true
+      app.listen(PORT, ()=>{
+        console.log(`Server listening on http://localhost:${PORT}/`)
+      })
     })
-  })
-  .catch(err => {
-    console.error('Failed to initialize the database:', err.message)
-    process.exitCode = 1
-  })
+    .catch(err => {
+      console.error('Failed to initialize the database:', err.message)
+      process.exitCode = 1
+    })
+}
+
+module.exports = app
