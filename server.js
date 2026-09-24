@@ -59,9 +59,9 @@ function sendNotificationEmail(subject, text){
 // --- Database setup ---
 // initDb() is idempotent (CREATE TABLE IF NOT EXISTS), so it's safe to run
 // it lazily on the first incoming request rather than only at startup.
-// This matters for serverless platforms (like Vercel), where there is no
-// long-lived "startup" moment — each cold start needs this to run once
-// before handling its first request.
+// This matters for serverless platforms (like Vercel/Netlify), where there
+// is no long-lived "startup" moment — each cold start needs this to run
+// once before handling its first request.
 let dbReady = false
 let dbReadyPromise = null
 
@@ -130,13 +130,42 @@ app.use(async (req, res, next) => {
 
 // ---------- API ----------
 
+// List posts WITHOUT the (potentially huge, base64) image data — the image
+// data alone can blow past Netlify Functions' 6MB response cap once there
+// are a handful of posts with photos. Each post instead gets a boolean
+// `has_image` flag, and the browser fetches the actual image bytes from
+// /api/posts/:id/image only when it needs to render one.
 app.get('/api/posts', async (req, res)=>{
   try{
-    const result = await db.execute('SELECT * FROM posts ORDER BY date ASC')
+    const result = await db.execute(
+      `SELECT id, title, content, date, likes,
+              CASE WHEN image IS NOT NULL THEN 1 ELSE 0 END AS has_image
+       FROM posts ORDER BY date ASC`
+    )
     res.json(result.rows)
   }catch(e){
     console.error('GET /api/posts failed:', e.message)
     res.status(500).json({error: 'Database error'})
+  }
+})
+
+// Serves a single post's image as actual binary bytes (not JSON/base64),
+// so the browser can just point an <img src="..."> at this URL directly.
+app.get('/api/posts/:id/image', async (req, res)=>{
+  const id = Number(req.params.id)
+  try{
+    const row = await db.execute({ sql: 'SELECT image FROM posts WHERE id = ?', args: [id] })
+    const dataUrl = row.rows[0]?.image
+    if(!dataUrl) return res.status(404).end()
+    const match = /^data:([^;]+);base64,(.+)$/.exec(dataUrl)
+    if(!match) return res.status(500).end()
+    const [, mime, base64] = match
+    res.set('Content-Type', mime)
+    res.set('Cache-Control', 'public, max-age=31536000, immutable')
+    res.send(Buffer.from(base64, 'base64'))
+  }catch(e){
+    console.error('GET /api/posts/:id/image failed:', e.message)
+    res.status(500).end()
   }
 })
 
@@ -168,6 +197,20 @@ app.post('/api/posts', async (req, res)=>{
     res.json(post)
   }catch(e){
     console.error('POST /api/posts failed:', e.message)
+    res.status(500).json({error: 'Database error'})
+  }
+})
+
+// Returns a single post WITH its full image data — used by the client to
+// fetch the current image when opening a post for editing.
+app.get('/api/posts/:id', async (req, res)=>{
+  const id = Number(req.params.id)
+  try{
+    const row = await db.execute({ sql: 'SELECT * FROM posts WHERE id = ?', args: [id] })
+    if(row.rows.length === 0) return res.status(404).json({error: 'Post not found'})
+    res.json(row.rows[0])
+  }catch(e){
+    console.error('GET /api/posts/:id failed:', e.message)
     res.status(500).json({error: 'Database error'})
   }
 })
@@ -296,9 +339,9 @@ app.get('/', (req, res)=>{
 
 // ---------- Startup ----------
 // When run directly (`node server.js`), start a normal always-on server.
-// When imported as a module (e.g. by Vercel's serverless runtime via
-// api/index.js), just export the Express app — the platform handles
-// invoking it per-request instead.
+// When imported as a module (e.g. by a Netlify/Vercel serverless function),
+// just export the Express app — the platform handles invoking it per-request
+// instead.
 if(require.main === module){
   initDb()
     .then(() => {

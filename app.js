@@ -7,6 +7,15 @@ let apiAvailable = null
 
 function qs(sel){return document.querySelector(sel)}
 
+// Posts loaded from the API no longer include the full `image` field (to
+// keep the /api/posts response small) — just a `has_image` flag. This
+// resolves to the URL an <img> tag should use either way.
+function postImageSrc(post){
+	if(post.image) return post.image
+	if(post.has_image) return `/api/posts/${post.id}/image`
+	return null
+}
+
 async function loadPosts(){
 	if(apiAvailable === false){
 		return loadLocalPosts()
@@ -19,6 +28,23 @@ async function loadPosts(){
 	}catch(e){
 		apiAvailable = false
 		return loadLocalPosts()
+	}
+}
+
+// Fetches a single post WITH its full image data (used when opening a post
+// for editing, since the list view intentionally omits it).
+async function loadPostWithImage(id){
+	if(apiAvailable === false){
+		const posts = await loadLocalPosts()
+		return posts.find(p => p.id === id) || null
+	}
+	try{
+		const res = await fetch(`/api/posts/${id}`)
+		if(!res.ok) throw new Error('API unavailable')
+		return await res.json()
+	}catch(e){
+		const posts = await loadLocalPosts()
+		return posts.find(p => p.id === id) || null
 	}
 }
 
@@ -152,8 +178,9 @@ function createPostElement(post){
 	const el = document.createElement('article')
 	el.className = 'post'
 	let imageHtml = ''
-	if(post.image){
-		imageHtml = `<img data-loaded="true" src="${escapeHtml(post.image)}" loading="lazy" decoding="async" alt="" style="width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:8px;margin-bottom:12px">`
+	const imgSrc = postImageSrc(post)
+	if(imgSrc){
+		imageHtml = `<img data-loaded="true" src="${escapeHtml(imgSrc)}" loading="lazy" decoding="async" alt="" style="width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:8px;margin-bottom:12px">`
 	}
 	const comments = Array.isArray(post.comments) ? post.comments : []
 	el.innerHTML = `
@@ -204,7 +231,8 @@ function closePostViewer(){
 
 function showPostViewer(post){
 	const viewer = ensurePostViewer()
-	const imageHtml = post.image ? `<img src="${escapeHtml(post.image)}" alt="${escapeHtml(post.title)}" class="viewer-image">` : ''
+	const imgSrc = postImageSrc(post)
+	const imageHtml = imgSrc ? `<img src="${escapeHtml(imgSrc)}" alt="${escapeHtml(post.title)}" class="viewer-image">` : ''
 	const comments = Array.isArray(post.comments) ? post.comments : []
 	viewer.classList.remove('hidden')
 	viewer.setAttribute('aria-hidden', 'false')
@@ -628,8 +656,10 @@ async function init(){
 				}
 			}
 		} else if(el.classList.contains('edit')){
-			const posts = await loadPosts()
-			const p = posts.find(x=>x.id === id)
+			if(isNaN(id)) return
+			// Fetch this post WITH its full image data — the list view
+			// intentionally omits it to keep /api/posts small.
+			const p = await loadPostWithImage(id)
 			if(p){
 				title.value = p.title
 				content.value = p.content
