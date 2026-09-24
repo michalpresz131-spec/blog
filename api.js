@@ -4,4 +4,9 @@
 const serverless = require('serverless-http')
 const app = require('../../server.js')
 
-exports.handler = serverless(app)
+// /api/posts/:id/image sends raw binary bytes (jpeg/png/etc). Without this,
+// Netlify's underlying Lambda runtime can mangle binary responses by
+// treating them as UTF-8 text instead of base64-encoding them.
+exports.handler = serverless(app, {
+	binary: ['image/*']
+})
