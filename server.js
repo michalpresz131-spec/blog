@@ -1,7 +1,8 @@
 // Allotment and Gardening AllManiac — server
 // Serves the static site and a small JSON API backed by Turso (a hosted,
 // SQLite-compatible database). Also emails michalpresz@gmail.com whenever
-// a new post or comment is created.
+// a new post or comment is created — and holds new posts/comments as
+// "pending" until a moderator approves them.
 
 const express = require('express')
 const path = require('path')
@@ -21,7 +22,7 @@ const TURSO_AUTH_TOKEN = process.env.TURSO_AUTH_TOKEN
 if(!TURSO_DATABASE_URL || !TURSO_AUTH_TOKEN){
   console.error('FATAL: TURSO_DATABASE_URL and/or TURSO_AUTH_TOKEN are not set.')
   console.error('Locally: run ". .\\set-env.ps1" in this terminal window first, then re-run "node server.js".')
-  console.error('On Vercel/Render: set them in the platform\'s Environment Variables settings.')
+  console.error('On Vercel/Netlify: set them in the platform\'s Environment Variables settings.')
   if(require.main === module){
     process.exit(1)
   }
@@ -56,12 +57,24 @@ function sendNotificationEmail(subject, text){
     .catch(err => console.error('Failed to send notification email:', err.message))
 }
 
+// --- Moderator auth ---
+// Required to use the moderation endpoints. Set this in your environment
+// (locally via set-env.ps1, on Netlify/Vercel via their env var settings).
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD
+if(!ADMIN_PASSWORD){
+  console.warn('Moderation: disabled (ADMIN_PASSWORD not set) — pending posts/comments cannot be approved until this is set.')
+}
+
+function checkAdminPassword(password){
+  return Boolean(ADMIN_PASSWORD) && typeof password === 'string' && password === ADMIN_PASSWORD
+}
+
 // --- Database setup ---
-// initDb() is idempotent (CREATE TABLE IF NOT EXISTS), so it's safe to run
-// it lazily on the first incoming request rather than only at startup.
-// This matters for serverless platforms (like Vercel/Netlify), where there
-// is no long-lived "startup" moment — each cold start needs this to run
-// once before handling its first request.
+// initDb() is idempotent (CREATE TABLE IF NOT EXISTS / column-exists checks),
+// so it's safe to run it lazily on the first incoming request rather than
+// only at startup. This matters for serverless platforms (like
+// Vercel/Netlify), where there is no long-lived "startup" moment — each
+// cold start needs this to run once before handling its first request.
 let dbReady = false
 let dbReadyPromise = null
 
@@ -81,20 +94,39 @@ async function initDb(){
       content TEXT NOT NULL,
       image TEXT,
       date TEXT NOT NULL,
-      likes INTEGER NOT NULL DEFAULT 0
+      likes INTEGER NOT NULL DEFAULT 0,
+      status TEXT NOT NULL DEFAULT 'pending'
     )`,
     `CREATE TABLE IF NOT EXISTS comments (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       post_id INTEGER NOT NULL,
       author TEXT NOT NULL,
       content TEXT NOT NULL,
-      date TEXT NOT NULL
+      date TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending'
     )`,
     `CREATE TABLE IF NOT EXISTS visits (
       id INTEGER PRIMARY KEY,
       total INTEGER NOT NULL DEFAULT 0
     )`
   ], 'write')
+
+  // Migration: if posts/comments tables already existed (from before the
+  // moderation feature), they won't have a `status` column yet. Add it,
+  // defaulting existing rows to 'approved' so already-published content
+  // doesn't disappear. This is safe to run every startup — the error for
+  // "column already exists" is caught and ignored.
+  const migrations = [
+    "ALTER TABLE posts ADD COLUMN status TEXT NOT NULL DEFAULT 'approved'",
+    "ALTER TABLE comments ADD COLUMN status TEXT NOT NULL DEFAULT 'approved'"
+  ]
+  for(const sql of migrations){
+    try{
+      await db.execute(sql)
+    }catch(e){
+      if(!/duplicate column name/i.test(e.message)) throw e
+    }
+  }
 
   const existingVisitsRow = await db.execute('SELECT total FROM visits WHERE id = 1')
   if(existingVisitsRow.rows.length === 0){
@@ -128,19 +160,21 @@ app.use(async (req, res, next) => {
   }
 })
 
-// ---------- API ----------
+// ---------- Public API ----------
 
 // List posts WITHOUT the (potentially huge, base64) image data — the image
 // data alone can blow past Netlify Functions' 6MB response cap once there
 // are a handful of posts with photos. Each post instead gets a boolean
 // `has_image` flag, and the browser fetches the actual image bytes from
 // /api/posts/:id/image only when it needs to render one.
+// Only approved posts are returned here — pending posts stay invisible to
+// the public until a moderator approves them.
 app.get('/api/posts', async (req, res)=>{
   try{
     const result = await db.execute(
       `SELECT id, title, content, date, likes,
               CASE WHEN image IS NOT NULL THEN 1 ELSE 0 END AS has_image
-       FROM posts ORDER BY date ASC`
+       FROM posts WHERE status = 'approved' ORDER BY date ASC`
     )
     res.json(result.rows)
   }catch(e){
@@ -180,19 +214,21 @@ app.get('/api/visits', async (req, res)=>{
   }
 })
 
+// New posts save as 'pending' — invisible to the public until approved.
+// The notification email fires immediately, before any approval happens.
 app.post('/api/posts', async (req, res)=>{
   const {title, content, image} = req.body
   const date = new Date().toISOString()
   try{
     const info = await db.execute({
-      sql: 'INSERT INTO posts (title, content, image, date, likes) VALUES (?, ?, ?, ?, 0)',
+      sql: "INSERT INTO posts (title, content, image, date, likes, status) VALUES (?, ?, ?, ?, 0, 'pending')",
       args: [title || '', content || '', image || null, date]
     })
     const row = await db.execute({ sql: 'SELECT * FROM posts WHERE id = ?', args: [Number(info.lastInsertRowid)] })
     const post = row.rows[0]
     sendNotificationEmail(
-      `New post on Allotment and Gardening AllManiac: ${post.title}`,
-      `A new post was published.\n\nTitle: ${post.title}\n\n${post.content}\n\nPosted: ${post.date}`
+      `New post awaiting approval: ${post.title}`,
+      `A new post was submitted and is awaiting your approval.\n\nTitle: ${post.title}\n\n${post.content}\n\nSubmitted: ${post.date}`
     )
     res.json(post)
   }catch(e){
@@ -258,7 +294,7 @@ app.post('/api/import', async (req, res)=>{
     await db.execute('DELETE FROM posts')
     for(const p of data){
       await db.execute({
-        sql: 'INSERT INTO posts (title, content, image, date, likes) VALUES (?, ?, ?, ?, ?)',
+        sql: "INSERT INTO posts (title, content, image, date, likes, status) VALUES (?, ?, ?, ?, ?, 'approved')",
         args: [p.title || '', p.content || '', p.image || null, p.date || new Date().toISOString(), p.likes || 0]
       })
     }
@@ -283,10 +319,14 @@ app.post('/api/posts/:id/like', async (req, res)=>{
   }
 })
 
+// Only approved comments are public.
 app.get('/api/posts/:id/comments', async (req, res)=>{
   const postId = Number(req.params.id)
   try{
-    const result = await db.execute({ sql: 'SELECT * FROM comments WHERE post_id = ? ORDER BY date ASC', args: [postId] })
+    const result = await db.execute({
+      sql: "SELECT * FROM comments WHERE post_id = ? AND status = 'approved' ORDER BY date ASC",
+      args: [postId]
+    })
     res.json(result.rows)
   }catch(e){
     console.error('GET /api/posts/:id/comments failed:', e.message)
@@ -294,6 +334,8 @@ app.get('/api/posts/:id/comments', async (req, res)=>{
   }
 })
 
+// New comments save as 'pending'. Notification email fires immediately,
+// before any approval happens.
 app.post('/api/posts/:id/comments', async (req, res)=>{
   const postId = Number(req.params.id)
   try{
@@ -305,18 +347,90 @@ app.post('/api/posts/:id/comments', async (req, res)=>{
     if(!author || !content) return res.status(400).json({error: 'Author and content are required'})
     const date = new Date().toISOString()
     const info = await db.execute({
-      sql: 'INSERT INTO comments (post_id, author, content, date) VALUES (?, ?, ?, ?)',
+      sql: "INSERT INTO comments (post_id, author, content, date, status) VALUES (?, ?, ?, ?, 'pending')",
       args: [postId, author, content, date]
     })
     const row = await db.execute({ sql: 'SELECT * FROM comments WHERE id = ?', args: [Number(info.lastInsertRowid)] })
     const comment = row.rows[0]
     sendNotificationEmail(
-      `New comment on "${post.title}"`,
-      `${author} commented on "${post.title}":\n\n${content}\n\nPosted: ${comment.date}`
+      `New comment awaiting approval on "${post.title}"`,
+      `${author} commented on "${post.title}" and it's awaiting your approval:\n\n${content}\n\nSubmitted: ${comment.date}`
     )
     res.json(comment)
   }catch(e){
     console.error('POST /api/posts/:id/comments failed:', e.message)
+    res.status(500).json({error: 'Database error'})
+  }
+})
+
+// ---------- Moderation (admin) API ----------
+// All of these require the correct ADMIN_PASSWORD, sent per-request (not a
+// persistent login session) — kept intentionally simple to match the rest
+// of this app.
+
+app.get('/api/admin/pending', async (req, res)=>{
+  if(!checkAdminPassword(req.query.password)) return res.status(401).json({error: 'Incorrect password'})
+  try{
+    const posts = await db.execute("SELECT id, title, content, date FROM posts WHERE status = 'pending' ORDER BY date ASC")
+    const comments = await db.execute(`
+      SELECT comments.id, comments.post_id, comments.author, comments.content, comments.date, posts.title AS post_title
+      FROM comments JOIN posts ON posts.id = comments.post_id
+      WHERE comments.status = 'pending' ORDER BY comments.date ASC
+    `)
+    res.json({posts: posts.rows, comments: comments.rows})
+  }catch(e){
+    console.error('GET /api/admin/pending failed:', e.message)
+    res.status(500).json({error: 'Database error'})
+  }
+})
+
+app.post('/api/admin/posts/:id/approve', async (req, res)=>{
+  if(!checkAdminPassword(req.body.password)) return res.status(401).json({error: 'Incorrect password'})
+  const id = Number(req.params.id)
+  try{
+    await db.execute({ sql: "UPDATE posts SET status = 'approved' WHERE id = ?", args: [id] })
+    res.json({success: true})
+  }catch(e){
+    console.error('POST /api/admin/posts/:id/approve failed:', e.message)
+    res.status(500).json({error: 'Database error'})
+  }
+})
+
+app.post('/api/admin/posts/:id/reject', async (req, res)=>{
+  if(!checkAdminPassword(req.body.password)) return res.status(401).json({error: 'Incorrect password'})
+  const id = Number(req.params.id)
+  try{
+    await db.batch([
+      { sql: 'DELETE FROM posts WHERE id = ?', args: [id] },
+      { sql: 'DELETE FROM comments WHERE post_id = ?', args: [id] }
+    ], 'write')
+    res.json({success: true})
+  }catch(e){
+    console.error('POST /api/admin/posts/:id/reject failed:', e.message)
+    res.status(500).json({error: 'Database error'})
+  }
+})
+
+app.post('/api/admin/comments/:id/approve', async (req, res)=>{
+  if(!checkAdminPassword(req.body.password)) return res.status(401).json({error: 'Incorrect password'})
+  const id = Number(req.params.id)
+  try{
+    await db.execute({ sql: "UPDATE comments SET status = 'approved' WHERE id = ?", args: [id] })
+    res.json({success: true})
+  }catch(e){
+    console.error('POST /api/admin/comments/:id/approve failed:', e.message)
+    res.status(500).json({error: 'Database error'})
+  }
+})
+
+app.post('/api/admin/comments/:id/reject', async (req, res)=>{
+  if(!checkAdminPassword(req.body.password)) return res.status(401).json({error: 'Incorrect password'})
+  const id = Number(req.params.id)
+  try{
+    await db.execute({ sql: 'DELETE FROM comments WHERE id = ?', args: [id] })
+    res.json({success: true})
+  }catch(e){
+    console.error('POST /api/admin/comments/:id/reject failed:', e.message)
     res.status(500).json({error: 'Database error'})
   }
 })

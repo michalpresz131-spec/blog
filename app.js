@@ -1,7 +1,11 @@
 const DRAFT_KEY = 'simple-blog-draft'
 const LOCAL_POSTS_KEY = 'simple-blog-posts'
 const LOCAL_COMMENTS_KEY = 'simple-blog-comments'
-const MODERATOR_SESSION_KEY = 'simple-blog-comment-admin'
+// The moderator password is kept in sessionStorage (cleared when the tab
+// closes) rather than persisted forever — it's sent to the server on every
+// moderation action instead of a real login session, matching the rest of
+// this app's intentionally simple approach.
+const MODERATOR_PASSWORD_KEY = 'simple-blog-moderator-password'
 
 let apiAvailable = null
 
@@ -143,11 +147,13 @@ async function submitComment(postId, author, content){
 			})
 			if(!res.ok) throw new Error('API rejected comment')
 			apiAvailable = true
-			return {message: 'Comment posted.'}
+			return {message: 'Comment submitted — it will appear once approved.'}
 		}catch(e){
 			apiAvailable = false
 		}
 	}
+	// Offline fallback: no moderation is possible without the server, so
+	// locally-added comments show immediately.
 	const comments = getLocalComments()
 	comments.push({
 		id: Date.now(),
@@ -161,17 +167,49 @@ async function submitComment(postId, author, content){
 	return {message: 'Comment posted.'}
 }
 
-async function loadPendingComments(){
-	return getLocalComments().filter(c => c.status === 'pending').map(normalizeComment)
+// ---------- Moderator session ----------
+
+function getModeratorPassword(){
+	try{ return sessionStorage.getItem(MODERATOR_PASSWORD_KEY) }catch(e){ return null }
 }
 
-async function updateCommentStatus(id, status){
-	const comments = getLocalComments()
-	const comment = comments.find(c => Number(c.id) === Number(id))
-	if(!comment) return false
-	comment.status = status
-	saveLocalComments(comments)
-	return true
+function setModeratorPassword(password){
+	try{
+		if(password) sessionStorage.setItem(MODERATOR_PASSWORD_KEY, password)
+		else sessionStorage.removeItem(MODERATOR_PASSWORD_KEY)
+	}catch(e){}
+}
+
+function isModeratorLoggedIn(){
+	return Boolean(getModeratorPassword())
+}
+
+function toggleModeratorLogin(){
+	const form = qs('#moderationLoginForm')
+	const toggle = qs('#moderationLoginToggle')
+	if(!form) return
+	const isVisible = form.style.display !== 'none'
+	form.style.display = isVisible ? 'none' : 'grid'
+	if(toggle){
+		toggle.textContent = isVisible ? 'Admin login' : 'Close login'
+	}
+}
+
+// Fetches pending posts + comments from the server using the stored
+// password. Returns 'unauthorized' on a wrong/expired password, null on any
+// other failure (e.g. offline), or {posts, comments} on success.
+async function fetchPendingItems(){
+	const password = getModeratorPassword()
+	if(!password) return null
+	try{
+		const res = await fetch(`/api/admin/pending?password=${encodeURIComponent(password)}`)
+		if(res.status === 401) return 'unauthorized'
+		if(!res.ok) throw new Error('Failed to load pending items')
+		return await res.json()
+	}catch(e){
+		console.error('Failed to load pending items:', e.message)
+		return null
+	}
 }
 
 function createPostElement(post){
@@ -287,73 +325,77 @@ function showPostViewer(post){
 	}
 }
 
-function isModeratorLoggedIn(){
-	try{
-		return localStorage.getItem(MODERATOR_SESSION_KEY) === 'true'
-	}catch(e){
-		return false
-	}
-}
-
-function setModeratorLoggedIn(value){
-	try{
-		localStorage.setItem(MODERATOR_SESSION_KEY, value ? 'true' : 'false')
-	}catch(e){}
-}
-
-function toggleModeratorLogin(){
-	const form = qs('#moderationLoginForm')
-	const toggle = qs('#moderationLoginToggle')
-	if(!form) return
-	const isVisible = form.style.display !== 'none'
-	form.style.display = isVisible ? 'none' : 'grid'
-	if(toggle){
-		toggle.textContent = isVisible ? 'Admin login' : 'Close login'
-	}
-}
-
 async function renderModerationQueue(){
 	const container = qs('#moderationQueue')
 	const loginPanel = qs('#moderationLoginForm')
 	const loginToggle = qs('#moderationLoginToggle')
 	const logoutBtn = qs('#moderationLogout')
-	if(!container) return
+	if(!container) return false
+
 	const loggedIn = isModeratorLoggedIn()
-	if(loginToggle){
-		loginToggle.style.display = loggedIn ? 'none' : 'inline-block'
-	}
-	if(loginPanel){
-		loginPanel.style.display = loggedIn ? 'none' : 'grid'
-	}
-	if(logoutBtn){
-		logoutBtn.style.display = loggedIn ? 'inline-block' : 'none'
-	}
+	if(loginToggle) loginToggle.style.display = loggedIn ? 'none' : 'inline-block'
+	if(loginPanel) loginPanel.style.display = loggedIn ? 'none' : 'grid'
+	if(logoutBtn) logoutBtn.style.display = loggedIn ? 'inline-block' : 'none'
+
 	if(!loggedIn){
-		container.innerHTML = '<p class="comment-empty">Sign in to review pending comments.</p>'
-		return
+		container.innerHTML = '<p class="comment-empty">Sign in to review pending posts and comments.</p>'
+		return false
 	}
-	try{
-		const pending = await loadPendingComments()
-		if(!pending.length){
-			container.innerHTML = '<p class="comment-empty">No pending comments.</p>'
-			return
-		}
-		container.innerHTML = pending.map(comment => `
-			<div class="moderation-item" data-comment-id="${comment.id}">
-				<div class="moderation-meta">
-					<strong>${escapeHtml(comment.author || 'Anonymous')}</strong>
-					<span>${new Date(comment.date).toLocaleString()}</span>
-				</div>
-				<p>${escapeHtml(comment.content)}</p>
-				<div class="moderation-actions">
-					<button type="button" class="btn approve-comment" data-comment-id="${comment.id}">Approve</button>
-					<button type="button" class="btn alt reject-comment" data-comment-id="${comment.id}">Reject</button>
-				</div>
+
+	const pending = await fetchPendingItems()
+
+	if(pending === 'unauthorized'){
+		setModeratorPassword(null)
+		if(loginToggle) loginToggle.style.display = 'inline-block'
+		if(loginPanel) loginPanel.style.display = 'grid'
+		if(logoutBtn) logoutBtn.style.display = 'none'
+		container.innerHTML = '<p class="comment-empty">Sign in to review pending posts and comments.</p>'
+		return false
+	}
+
+	if(!pending){
+		container.innerHTML = '<p class="comment-empty">Moderation queue unavailable right now.</p>'
+		return false
+	}
+
+	const posts = Array.isArray(pending.posts) ? pending.posts : []
+	const comments = Array.isArray(pending.comments) ? pending.comments : []
+
+	if(posts.length === 0 && comments.length === 0){
+		container.innerHTML = '<p class="comment-empty">Nothing pending review.</p>'
+		return true
+	}
+
+	const postsHtml = posts.map(post => `
+		<div class="moderation-item" data-post-id="${post.id}">
+			<div class="moderation-meta">
+				<strong>New post: ${escapeHtml(post.title)}</strong>
+				<span>${new Date(post.date).toLocaleString()}</span>
 			</div>
-		`).join('')
-	}catch(e){
-		container.innerHTML = '<p class="comment-empty">Moderation queue unavailable.</p>'
-	}
+			<p>${escapeHtml(post.content)}</p>
+			<div class="moderation-actions">
+				<button type="button" class="btn approve-post" data-post-id="${post.id}">Approve</button>
+				<button type="button" class="btn alt reject-post" data-post-id="${post.id}">Reject</button>
+			</div>
+		</div>
+	`).join('')
+
+	const commentsHtml = comments.map(comment => `
+		<div class="moderation-item" data-comment-id="${comment.id}">
+			<div class="moderation-meta">
+				<strong>${escapeHtml(comment.author || 'Anonymous')}</strong> commented on "${escapeHtml(comment.post_title || '')}"
+				<span>${new Date(comment.date).toLocaleString()}</span>
+			</div>
+			<p>${escapeHtml(comment.content)}</p>
+			<div class="moderation-actions">
+				<button type="button" class="btn approve-comment" data-comment-id="${comment.id}">Approve</button>
+				<button type="button" class="btn alt reject-comment" data-comment-id="${comment.id}">Reject</button>
+			</div>
+		</div>
+	`).join('')
+
+	container.innerHTML = postsHtml + commentsHtml
+	return true
 }
 
 async function render(){
@@ -567,6 +609,7 @@ async function init(){
 			setEditingUI(false, publishBtn, cancelBtn)
 		} else {
 			await addPost(title.value.trim(), content.value.trim(), currentImage)
+			alert('Post submitted — it will appear once approved.')
 		}
 		form.reset()
 		imageInput.value = ''
@@ -708,15 +751,36 @@ async function init(){
 		moderationQueue.addEventListener('click', async (e)=>{
 			const btn = e.target.closest('button')
 			if(!btn) return
-			const commentId = Number(btn.dataset.commentId)
-			if(!commentId) return
-			const nextStatus = btn.classList.contains('approve-comment') ? 'approved' : 'rejected'
+			const password = getModeratorPassword()
+			if(!password) return
+
+			let url = null
+			if(btn.classList.contains('approve-post') || btn.classList.contains('reject-post')){
+				const postId = Number(btn.dataset.postId)
+				const action = btn.classList.contains('approve-post') ? 'approve' : 'reject'
+				url = `/api/admin/posts/${postId}/${action}`
+			} else if(btn.classList.contains('approve-comment') || btn.classList.contains('reject-comment')){
+				const commentId = Number(btn.dataset.commentId)
+				const action = btn.classList.contains('approve-comment') ? 'approve' : 'reject'
+				url = `/api/admin/comments/${commentId}/${action}`
+			}
+			if(!url) return
+
 			try{
-				const ok = await updateCommentStatus(commentId, nextStatus)
-				if(ok){
-					await render()
-					alert(`Comment ${nextStatus}.`)
+				const res = await fetch(url, {
+					method: 'POST',
+					headers: {'Content-Type':'application/json'},
+					body: JSON.stringify({password})
+				})
+				if(res.status === 401){
+					setModeratorPassword(null)
+					await renderModerationQueue()
+					alert('Session expired — please sign in again.')
+					return
 				}
+				if(!res.ok) throw new Error('Action failed')
+				await renderModerationQueue()
+				await render()
 			}catch(err){
 				alert(err.message)
 			}
@@ -735,15 +799,16 @@ async function init(){
 			e.preventDefault()
 			const input = qs('#moderationPassword')
 			if(!input) return
-			if(input.value === MODERATOR_PASSWORD){
-				setModeratorLoggedIn(true)
+			const password = input.value
+			setModeratorPassword(password)
+			const ok = await renderModerationQueue()
+			if(ok){
 				moderationLoginForm.style.display = 'none'
-				await render()
 				alert('Moderator access enabled.')
-				input.value = ''
-				return
+			} else {
+				setModeratorPassword(null)
+				alert('Incorrect moderator password.')
 			}
-			alert('Incorrect moderator password.')
 			input.value = ''
 		})
 	}
@@ -751,7 +816,7 @@ async function init(){
 	const moderationLogout = qs('#moderationLogout')
 	if(moderationLogout){
 		moderationLogout.addEventListener('click', () => {
-			setModeratorLoggedIn(false)
+			setModeratorPassword(null)
 			renderModerationQueue()
 		})
 	}
