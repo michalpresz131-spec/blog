@@ -1,0 +1,13 @@
+{
+  "version": "1.0",
+  "project": {
+    "name": "Allotmentality",
+    "created": "2026-09-29T17:23:42.4867148+01:00"
+  },
+  "environments": {
+    "node": {
+      "name": "node",
+      "profile": "michalpresz131"
+    }
+  }
+}
