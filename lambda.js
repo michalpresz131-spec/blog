@@ -15,7 +15,7 @@ async function createAppHandler(){
   if(missing.length) throw new Error(`Missing required blog settings: ${missing.join(', ')}`)
   Object.assign(process.env, settings)
   const app = require('./server.js')
-  return serverless(app)
+  return serverless(app, {binary: ['image/*']})
 }
 
 exports.handler = async (event, context) => {

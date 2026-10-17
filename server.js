@@ -9,6 +9,7 @@ const path = require('path')
 const fs = require('fs')
 const { createClient } = require('@libsql/client')
 const nodemailer = require('nodemailer')
+const sharp = require('sharp')
 
 console.log('Starting server. Script directory (__dirname):', __dirname)
 
@@ -198,9 +199,13 @@ app.get('/api/posts/:id/image', async (req, res)=>{
     const match = /^data:([^;]+);base64,(.+)$/.exec(dataUrl)
     if(!match) return res.status(500).end()
     const [, mime, base64] = match
-    res.set('Content-Type', mime)
+    const image = await sharp(Buffer.from(base64, 'base64'))
+      .resize({width: 1600, height: 1600, fit: 'inside', withoutEnlargement: true})
+      .jpeg({quality: 75})
+      .toBuffer()
+    res.set('Content-Type', 'image/jpeg')
     res.set('Cache-Control', 'public, max-age=31536000, immutable')
-    res.send(Buffer.from(base64, 'base64'))
+    res.send(image)
   }catch(e){
     console.error('GET /api/posts/:id/image failed:', e.message)
     res.status(500).end()

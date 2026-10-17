@@ -29,7 +29,7 @@ if(API_BASE_URL){
 // resolves to the URL an <img> tag should use either way.
 function postImageSrc(post){
 	if(post.image) return post.image
-	if(post.has_image) return apiUrl(`/api/posts/${post.id}/image`)
+	if(post.has_image) return apiUrl(`/api/posts/${post.id}/image?v=${encodeURIComponent(post.date || '1')}`)
 	return null
 }
 
