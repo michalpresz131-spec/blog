@@ -27,7 +27,7 @@ jobs:
       - name: Prepare static site
         run: |
           mkdir _site
-          cp index.html app.js style.css posts.json _site/
+          cp index.html app.js aws-config.js style.css _site/
           cp -r assets _site/assets
 
       - name: Setup Pages

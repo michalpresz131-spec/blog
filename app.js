@@ -6,17 +6,30 @@ const LOCAL_COMMENTS_KEY = 'simple-blog-comments'
 // moderation action instead of a real login session, matching the rest of
 // this app's intentionally simple approach.
 const MODERATOR_PASSWORD_KEY = 'simple-blog-moderator-password'
+const API_BASE_URL = (window.BLOG_API_BASE_URL || '').replace(/\/+$/, '')
 
 let apiAvailable = null
 
 function qs(sel){return document.querySelector(sel)}
+
+function apiUrl(path){return `${API_BASE_URL}${path}`}
+
+if(API_BASE_URL){
+	const browserFetch = window.fetch.bind(window)
+	window.fetch = (input, options)=>{
+		if(typeof input === 'string' && input.startsWith('/api/')){
+			return browserFetch(apiUrl(input), options)
+		}
+		return browserFetch(input, options)
+	}
+}
 
 // Posts loaded from the API no longer include the full `image` field (to
 // keep the /api/posts response small) — just a `has_image` flag. This
 // resolves to the URL an <img> tag should use either way.
 function postImageSrc(post){
 	if(post.image) return post.image
-	if(post.has_image) return `/api/posts/${post.id}/image`
+	if(post.has_image) return apiUrl(`/api/posts/${post.id}/image`)
 	return null
 }
 

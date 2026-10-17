@@ -1,13 +1,24 @@
 # Allotment Mentality
 
-The blog runs locally with the Express API and uses Supabase for shared moderation when published on GitHub Pages.
+The blog runs locally with the Express API and uses Turso for shared post,
+comment, and visit data.
+
+## Low-cost publishing
+
+The static page is published on GitHub Pages over HTTPS, and its API runs on
+AWS Lambda using a Lambda Function URL. The API continues to use the existing
+Turso database. See [AWS_DEPLOYMENT.md](./AWS_DEPLOYMENT.md) for deployment
+details.
 
 ## Moderation
-thx
-Hosted visitors can submit posts, but only posts with `status = approved` are displayed publicly. Review submissions in the Supabase Table Editor:
 
+Visitors can submit posts and comments, but only items with `status = approved`
+are shown publicly. Configure `ADMIN_PASSWORD` on the server and review pending
+submissions in the blog's moderation panel. For AWS, set this value in the
+encrypted Systems Manager parameter described in
+[AWS_DEPLOYMENT.md](./AWS_DEPLOYMENT.md).
 
-Change a row's `status` from `pending` to `approved` to publish it, or `rejected` to keep it hidden. The table and row-level security policies are already configured in the `AllotmentMentality` project.
+The moderation data is stored in Turso.
 
 ## GitHub Pages
 
@@ -17,7 +28,8 @@ The workflow in `.github/workflows/pages.yml` publishes the site whenever `main`
 2. In the repository, open **Settings > Pages** and select **GitHub Actions** as the source.
 3. Push a change or run **Deploy to GitHub Pages** from the **Actions** tab.
 
-The workflow publishes `index.html`, `app.js`, `style.css`, `posts.json`, and `assets/`. The deployed site automatically falls back to browser storage when the Express API is unavailable.
+The workflow publishes the static UI. The deployed `aws-config.js` points it at
+the AWS API; the GitHub Pages build keeps the local default file.
 
 ## Run locally
 
@@ -38,16 +50,3 @@ Invoke-RestMethod http://localhost:8000/api/posts
 ```
 
 If you don't have Node installed, the static site can still be previewed by opening `index.html` directly, although browser security settings may prevent loading the seed `posts.json` file. Use the server for full local behavior.
-
-Run with Docker (recommended if Node isn't installed):
-
-```bash
-docker compose up --build
-# open http://localhost:8000/
-```
-
-To stop:
-
-```bash
-docker compose down
-```
