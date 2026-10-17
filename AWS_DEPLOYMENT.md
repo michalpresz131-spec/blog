@@ -36,6 +36,10 @@ The Lambda reads and decrypts the parameter once per execution environment; the
 secrets never go to the browser. `aws-config.js` contains only the public API
 URL and can safely be published with the static page.
 
+Post images remain stored in Turso. The Lambda resizes them to JPEG when serving
+them and returns them as binary data, keeping image responses within the Lambda
+payload limit.
+
 ## Publish the static page
 
 The GitHub Actions workflow publishes `index.html`, `app.js`, `aws-config.js`,
