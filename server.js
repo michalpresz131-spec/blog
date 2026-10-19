@@ -200,6 +200,7 @@ app.get('/api/posts/:id/image', async (req, res)=>{
     if(!match) return res.status(500).end()
     const [, mime, base64] = match
     const image = await sharp(Buffer.from(base64, 'base64'))
+      .rotate()
       .resize({width: 1600, height: 1600, fit: 'inside', withoutEnlargement: true})
       .jpeg({quality: 75})
       .toBuffer()
