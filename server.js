@@ -23,7 +23,7 @@ const TURSO_AUTH_TOKEN = process.env.TURSO_AUTH_TOKEN
 if(!TURSO_DATABASE_URL || !TURSO_AUTH_TOKEN){
   console.error('FATAL: TURSO_DATABASE_URL and/or TURSO_AUTH_TOKEN are not set.')
   console.error('Locally: run ". .\\set-env.ps1" in this terminal window first, then re-run "node server.js".')
-  console.error('On Vercel/Netlify: set them in the platform\'s Environment Variables settings.')
+  console.error('On Netlify: set them in the platform\'s Environment Variables settings.')
   if(require.main === module){
     process.exit(1)
   }
@@ -60,7 +60,7 @@ function sendNotificationEmail(subject, text){
 
 // --- Moderator auth ---
 // Required to use the moderation endpoints. Set this in your environment
-// (locally via set-env.ps1, on Netlify/Vercel via their env var settings).
+// (locally via set-env.ps1, on Netlify via its environment variable settings).
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD
 if(!ADMIN_PASSWORD){
   console.warn('Moderation: disabled (ADMIN_PASSWORD not set) — pending posts/comments cannot be approved until this is set.')
@@ -74,7 +74,7 @@ function checkAdminPassword(password){
 // initDb() is idempotent (CREATE TABLE IF NOT EXISTS / column-exists checks),
 // so it's safe to run it lazily on the first incoming request rather than
 // only at startup. This matters for serverless platforms (like
-// Vercel/Netlify), where there is no long-lived "startup" moment — each
+// Netlify), where there is no long-lived "startup" moment — each
 // cold start needs this to run once before handling its first request.
 let dbReady = false
 let dbReadyPromise = null
@@ -465,7 +465,7 @@ app.get('/', (req, res)=>{
 
 // ---------- Startup ----------
 // When run directly (`node server.js`), start a normal always-on server.
-// When imported as a module (e.g. by a Netlify/Vercel serverless function),
+// When imported as a module (e.g. by a Netlify serverless function),
 // just export the Express app — the platform handles invoking it per-request
 // instead.
 if(require.main === module){
