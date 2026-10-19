@@ -35,7 +35,7 @@ const db = createClient({
 })
 
 // --- Email notifications (SMTP via Gmail app password) ---
-// Optional environment variables:
+// Required environment variables:
 //   GMAIL_USER, GMAIL_APP_PASSWORD, NOTIFY_EMAIL (defaults to michalpresz@gmail.com)
 const GMAIL_USER = process.env.GMAIL_USER
 const GMAIL_APP_PASSWORD = process.env.GMAIL_APP_PASSWORD
@@ -48,14 +48,13 @@ if(GMAIL_USER && GMAIL_APP_PASSWORD){
     auth: { user: GMAIL_USER, pass: GMAIL_APP_PASSWORD }
   })
   console.log('Email notifications: enabled (sending to', NOTIFY_EMAIL + ')')
-} else {
-  console.warn('Email notifications: disabled (GMAIL_USER / GMAIL_APP_PASSWORD not set)')
 }
 
-function sendNotificationEmail(subject, text){
-  if(!mailTransporter) return
-  mailTransporter.sendMail({ from: GMAIL_USER, to: NOTIFY_EMAIL, subject, text })
-    .catch(err => console.error('Failed to send notification email:', err.message))
+async function sendNotificationEmail(subject, text){
+  if(!mailTransporter){
+    throw new Error('Email notifications are not configured (GMAIL_USER / GMAIL_APP_PASSWORD not set)')
+  }
+  await mailTransporter.sendMail({ from: GMAIL_USER, to: NOTIFY_EMAIL, subject, text })
 }
 
 // --- Moderator auth ---
@@ -236,10 +235,15 @@ app.post('/api/posts', async (req, res)=>{
     })
     const row = await db.execute({ sql: 'SELECT * FROM posts WHERE id = ?', args: [Number(info.lastInsertRowid)] })
     const post = row.rows[0]
-    sendNotificationEmail(
-      `New post awaiting approval: ${post.title}`,
-      `A new post was submitted and is awaiting your approval.\n\nTitle: ${post.title}\n\n${post.content}\n\nSubmitted: ${post.date}`
-    )
+    try{
+      await sendNotificationEmail(
+        `New post awaiting approval: ${post.title}`,
+        `A new post was submitted and is awaiting your approval.\n\nTitle: ${post.title}\n\n${post.content}\n\nSubmitted: ${post.date}`
+      )
+    }catch(e){
+      console.error('POST /api/posts notification failed:', e.message)
+      return res.status(502).json({error: 'Post was saved, but the email notification could not be sent.'})
+    }
     res.json(post)
   }catch(e){
     console.error('POST /api/posts failed:', e.message)
@@ -364,10 +368,15 @@ app.post('/api/posts/:id/comments', async (req, res)=>{
     })
     const row = await db.execute({ sql: 'SELECT * FROM comments WHERE id = ?', args: [Number(info.lastInsertRowid)] })
     const comment = row.rows[0]
-    sendNotificationEmail(
-      `New comment awaiting approval on "${post.title}"`,
-      `${author} commented on "${post.title}" and it's awaiting your approval:\n\n${content}\n\nSubmitted: ${comment.date}`
-    )
+    try{
+      await sendNotificationEmail(
+        `New comment awaiting approval on "${post.title}"`,
+        `${author} commented on "${post.title}" and it's awaiting your approval:\n\n${content}\n\nSubmitted: ${comment.date}`
+      )
+    }catch(e){
+      console.error('POST /api/posts/:id/comments notification failed:', e.message)
+      return res.status(502).json({error: 'Comment was saved, but the email notification could not be sent.'})
+    }
     res.json(comment)
   }catch(e){
     console.error('POST /api/posts/:id/comments failed:', e.message)

@@ -10,7 +10,14 @@ async function createAppHandler(){
     WithDecryption: true
   }))
   const settings = JSON.parse(result.Parameter.Value)
-  const required = ['TURSO_DATABASE_URL', 'TURSO_AUTH_TOKEN', 'ADMIN_PASSWORD']
+  const required = [
+    'TURSO_DATABASE_URL',
+    'TURSO_AUTH_TOKEN',
+    'ADMIN_PASSWORD',
+    'GMAIL_USER',
+    'GMAIL_APP_PASSWORD',
+    'NOTIFY_EMAIL'
+  ]
   const missing = required.filter(name => !settings[name])
   if(missing.length) throw new Error(`Missing required blog settings: ${missing.join(', ')}`)
   Object.assign(process.env, settings)

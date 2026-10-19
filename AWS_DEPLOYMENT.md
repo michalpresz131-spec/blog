@@ -28,9 +28,17 @@ The deployment uses:
   `/allotmentality/blog/production`, readable only by the Lambda role.
 - A Lambda execution role scoped to that parameter.
 
-Set the required settings in the encrypted parameter: `TURSO_DATABASE_URL`,
-`TURSO_AUTH_TOKEN`, and `ADMIN_PASSWORD`. Optional settings are
-`GMAIL_USER`, `GMAIL_APP_PASSWORD`, and `NOTIFY_EMAIL`.
+Set these settings in the encrypted parameter:
+`TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`, `ADMIN_PASSWORD`, `GMAIL_USER`,
+`GMAIL_APP_PASSWORD`, and `NOTIFY_EMAIL`. The Gmail credentials must be for an
+account with a Google app password enabled. `NOTIFY_EMAIL` is the Gmail address
+that should receive a notification for each new post and comment.
+
+Post and comment submissions are saved before the API waits for Gmail to accept
+the notification. If Gmail is not configured or rejects the message, the API
+reports that the submission was saved but the notification failed; check the
+Lambda logs and correct the encrypted parameter. Gmail acceptance does not
+guarantee delivery to the inbox, so also check spam and Gmail delivery notices.
 
 The Lambda reads and decrypts the parameter once per execution environment; the
 secrets never go to the browser. `aws-config.js` contains only the public API
