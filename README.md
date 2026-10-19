@@ -18,7 +18,9 @@ submissions in the blog's moderation panel. For AWS, set this value in the
 encrypted Systems Manager parameter described in
 [AWS_DEPLOYMENT.md](./AWS_DEPLOYMENT.md).
 
-The moderation data is stored in Turso.
+Only an authenticated admin can approve or reject submissions, delete posts or
+comments, or import posts (which replaces the stored posts and comments).
+Moderation data is stored in Turso.
 
 ## GitHub Pages
 

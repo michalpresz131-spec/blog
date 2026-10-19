@@ -243,7 +243,9 @@ function createPostElement(post){
 			<button data-id="${post.id}" class="btn alt like">👍 ${post.likes || 0}</button>
 			<button data-id="${post.id}" class="btn alt view">View</button>
 			<button data-id="${post.id}" class="btn alt edit">Edit</button>
-			<button data-id="${post.id}" class="btn alt delete">Delete</button>
+			${isModeratorLoggedIn() ? `
+				<button data-id="${post.id}" class="btn alt delete">Delete</button>
+			` : ''}
 		</div>
 		<div class="comments-panel">
 			<div class="comments-title">Comments (${comments.length})</div>
@@ -461,14 +463,32 @@ async function updatePost(id, title, content, image){
 }
 
 async function deletePost(id){
-	if(apiAvailable === false){
-		const posts = await loadLocalPosts()
-		saveLocalPosts(posts.filter(p=>p.id !== id))
-		await render()
+	const password = getModeratorPassword()
+	if(!password){
+		alert('Log in as admin to delete posts.')
 		return
 	}
-	await fetch(`/api/posts/${id}`, {method:'DELETE'})
-	await render()
+	if(apiAvailable === false){
+		alert('Post deletion requires an available server and admin verification.')
+		return
+	}
+	try{
+		const res = await fetch(`/api/posts/${id}`, {
+			method: 'DELETE',
+			headers: {'Content-Type':'application/json'},
+			body: JSON.stringify({password})
+		})
+		if(res.status === 401){
+			setModeratorPassword(null)
+			await render()
+			alert('Session expired — please sign in again.')
+			return
+		}
+		if(!res.ok) throw new Error('Failed to delete post.')
+		await render()
+	}catch(err){
+		alert(err.message)
+	}
 }
 
 async function exportPosts(){
@@ -488,16 +508,24 @@ function importPostsFile(file){
 	const reader = new FileReader()
 	reader.onload = async ()=>{
 		try{
+			const password = getModeratorPassword()
+			if(!password) throw new Error('Log in as admin to import posts.')
 			const data = JSON.parse(reader.result)
 			if(!Array.isArray(data)) throw new Error('Invalid format')
 			const ok = data.every(p=>p && typeof p.title === 'string' && typeof p.content === 'string')
 			if(!ok) throw new Error('Invalid entries')
-			if(apiAvailable === false){
-				saveLocalPosts(data)
+			if(apiAvailable === false) throw new Error('Post import requires an available server and admin verification.')
+			const res = await fetch('/api/import', {
+				method: 'POST',
+				headers: {'Content-Type':'application/json'},
+				body: JSON.stringify({posts: data, password})
+			})
+			if(res.status === 401){
+				setModeratorPassword(null)
 				await render()
-				return
+				throw new Error('Session expired — please sign in again.')
 			}
-			await fetch('/api/import', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(data)})
+			if(!res.ok) throw new Error('Server rejected the import.')
 			await render()
 		}catch(err){
 			alert('Failed to import posts: '+err.message)
@@ -817,6 +845,7 @@ async function init(){
 			const ok = await renderModerationQueue()
 			if(ok){
 				moderationLoginForm.style.display = 'none'
+				await render()
 				alert('Moderator access enabled.')
 			} else {
 				setModeratorPassword(null)
@@ -828,9 +857,9 @@ async function init(){
 
 	const moderationLogout = qs('#moderationLogout')
 	if(moderationLogout){
-		moderationLogout.addEventListener('click', () => {
+		moderationLogout.addEventListener('click', async () => {
 			setModeratorPassword(null)
-			renderModerationQueue()
+			await render()
 		})
 	}
 

@@ -281,6 +281,7 @@ app.put('/api/posts/:id', async (req, res)=>{
 })
 
 app.delete('/api/posts/:id', async (req,res)=>{
+  if(!checkAdminPassword(req.body.password)) return res.status(401).json({error: 'Incorrect password'})
   const id = Number(req.params.id)
   try{
     const existing = await db.execute({ sql: 'SELECT id FROM posts WHERE id = ?', args: [id] })
@@ -297,7 +298,8 @@ app.delete('/api/posts/:id', async (req,res)=>{
 })
 
 app.post('/api/import', async (req, res)=>{
-  const data = req.body
+  if(!checkAdminPassword(req.body.password)) return res.status(401).json({error: 'Incorrect password'})
+  const data = req.body.posts
   if(!Array.isArray(data)) return res.status(400).json({error:'Expected array'})
   try{
     await db.execute('DELETE FROM comments')
