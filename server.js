@@ -405,56 +405,31 @@ app.get('/api/admin/pending', async (req, res)=>{
   }
 })
 
-app.post('/api/admin/posts/:id/approve', async (req, res)=>{
-  if(!checkAdminPassword(req.body.password)) return res.status(401).json({error: 'Incorrect password'})
-  const id = Number(req.params.id)
-  try{
-    await db.execute({ sql: "UPDATE posts SET status = 'approved' WHERE id = ?", args: [id] })
-    res.json({success: true})
-  }catch(e){
-    console.error('POST /api/admin/posts/:id/approve failed:', e.message)
-    res.status(500).json({error: 'Database error'})
-  }
-})
+function addModerationRoute(resource, action, execute){
+  const route = `/api/admin/${resource}/:id/${action}`
+  app.post(route, async (req, res)=>{
+    if(!checkAdminPassword(req.body.password)) return res.status(401).json({error: 'Incorrect password'})
+    try{
+      await execute(Number(req.params.id))
+      res.json({success: true})
+    }catch(e){
+      console.error(`POST ${route} failed:`, e.message)
+      res.status(500).json({error: 'Database error'})
+    }
+  })
+}
 
-app.post('/api/admin/posts/:id/reject', async (req, res)=>{
-  if(!checkAdminPassword(req.body.password)) return res.status(401).json({error: 'Incorrect password'})
-  const id = Number(req.params.id)
-  try{
-    await db.batch([
-      { sql: 'DELETE FROM posts WHERE id = ?', args: [id] },
-      { sql: 'DELETE FROM comments WHERE post_id = ?', args: [id] }
-    ], 'write')
-    res.json({success: true})
-  }catch(e){
-    console.error('POST /api/admin/posts/:id/reject failed:', e.message)
-    res.status(500).json({error: 'Database error'})
-  }
-})
-
-app.post('/api/admin/comments/:id/approve', async (req, res)=>{
-  if(!checkAdminPassword(req.body.password)) return res.status(401).json({error: 'Incorrect password'})
-  const id = Number(req.params.id)
-  try{
-    await db.execute({ sql: "UPDATE comments SET status = 'approved' WHERE id = ?", args: [id] })
-    res.json({success: true})
-  }catch(e){
-    console.error('POST /api/admin/comments/:id/approve failed:', e.message)
-    res.status(500).json({error: 'Database error'})
-  }
-})
-
-app.post('/api/admin/comments/:id/reject', async (req, res)=>{
-  if(!checkAdminPassword(req.body.password)) return res.status(401).json({error: 'Incorrect password'})
-  const id = Number(req.params.id)
-  try{
-    await db.execute({ sql: 'DELETE FROM comments WHERE id = ?', args: [id] })
-    res.json({success: true})
-  }catch(e){
-    console.error('POST /api/admin/comments/:id/reject failed:', e.message)
-    res.status(500).json({error: 'Database error'})
-  }
-})
+addModerationRoute('posts', 'approve', id =>
+  db.execute({ sql: "UPDATE posts SET status = 'approved' WHERE id = ?", args: [id] }))
+addModerationRoute('posts', 'reject', id =>
+  db.batch([
+    { sql: 'DELETE FROM posts WHERE id = ?', args: [id] },
+    { sql: 'DELETE FROM comments WHERE post_id = ?', args: [id] }
+  ], 'write'))
+addModerationRoute('comments', 'approve', id =>
+  db.execute({ sql: "UPDATE comments SET status = 'approved' WHERE id = ?", args: [id] }))
+addModerationRoute('comments', 'reject', id =>
+  db.execute({ sql: 'DELETE FROM comments WHERE id = ?', args: [id] }))
 
 // ---------- Static site ----------
 
