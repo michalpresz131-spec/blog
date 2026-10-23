@@ -3,12 +3,13 @@
 The blog runs locally with the Express API and uses Turso for shared post,
 comment, and visit data.
 
-## Low-cost publishing
+## Publishing
 
-The static page is published on GitHub Pages over HTTPS, and its API runs on
-AWS Lambda using a Lambda Function URL. The API continues to use the existing
-Turso database. See [AWS_DEPLOYMENT.md](./AWS_DEPLOYMENT.md) for deployment
-details.
+The static page is published on Netlify over HTTPS. Its API runs separately on
+AWS Lambda using a Lambda Function URL and continues to use the existing Turso
+database. Netlify publishes only the static site files; `aws-config.js`
+connects the page to the AWS API. See [AWS_DEPLOYMENT.md](./AWS_DEPLOYMENT.md)
+for AWS deployment details.
 
 ## Moderation
 
@@ -22,16 +23,12 @@ Only an authenticated admin can approve or reject submissions, delete posts or
 comments, or import posts (which replaces the stored posts and comments).
 Moderation data is stored in Turso.
 
-## GitHub Pages
+## Netlify
 
-The workflow in `.github/workflows/pages.yml` publishes the site whenever `main` is pushed.
-
-1. Push this repository to GitHub using the `main` branch.
-2. In the repository, open **Settings > Pages** and select **GitHub Actions** as the source.
-3. Push a change or run **Deploy to GitHub Pages** from the **Actions** tab.
-
-The workflow publishes the static UI. The deployed `aws-config.js` points it at
-the AWS API; the GitHub Pages build keeps the local default file.
+Connect this repository to Netlify and deploy the `main` branch. The
+`netlify.toml` configuration builds and publishes only the static UI files.
+Keep the AWS Lambda Function URL in `aws-config.js`; the Netlify site uses it
+to reach the API.
 
 ## Run locally
 

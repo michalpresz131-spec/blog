@@ -1,11 +1,11 @@
 # Low-cost deployment
 
-The low-cost setup serves the static UI from GitHub Pages (HTTPS) and runs the
+The low-cost setup serves the static UI from Netlify (HTTPS) and runs the
 existing Express API on AWS Lambda through a Lambda Function URL. The API uses
 the existing Turso database. No always-on server, Application Load Balancer,
 API Gateway, or CloudFront distribution is needed.
 
-Keeping the page on GitHub Pages gives the moderator login HTTPS without the
+Keeping the page on Netlify gives the moderator login HTTPS without the
 additional cost and setup of an AWS CDN. The Lambda Function URL is public;
 do not put Turso credentials in `aws-config.js` or any browser code.
 
@@ -50,16 +50,16 @@ payload limit.
 
 ## Publish the static page
 
-The GitHub Actions workflow publishes `index.html`, `app.js`, `aws-config.js`,
-`style.css`, and `assets/` to GitHub Pages on a push to `main`. Publish the
+Netlify uses `netlify.toml` to publish only `index.html`, `app.js`,
+`aws-config.js`, `style.css`, and `assets/` on a push to `main`. Publish the
 Lambda Function URL in `aws-config.js`:
 
 ```js
 window.BLOG_API_BASE_URL = 'https://YOUR_FUNCTION_URL.lambda-url.us-east-1.on.aws'
 ```
 
-The URL is public; it is not an AWS credential. Keep GitHub Pages configured to
-use **GitHub Actions** as its publishing source.
+The URL is public; it is not an AWS credential. The API allows cross-origin
+requests from the static site.
 
 ## Build and deploy the API
 
