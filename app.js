@@ -233,7 +233,6 @@ function createPostElement(post){
 	if(imgSrc){
 		imageHtml = `<img data-loaded="true" src="${escapeHtml(imgSrc)}" loading="lazy" decoding="async" alt="" style="width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:8px;margin-bottom:12px">`
 	}
-	const comments = Array.isArray(post.comments) ? post.comments : []
 	const liked = isPostLiked(post.id)
 	el.innerHTML = `
 		<button type="button" class="post-title">${escapeHtml(post.title)}</button>
@@ -249,15 +248,17 @@ function createPostElement(post){
 			` : ''}
 		</div>
 		<div class="comments-panel">
-			<div class="comments-title">Comments (${comments.length})</div>
-			<div class="comment-list">${renderCommentList(comments)}</div>
-			<form class="comment-form" data-post-id="${post.id}">
-				<label for="comment-author-card-${post.id}" class="sr-only">Your name</label>
-				<input id="comment-author-card-${post.id}" name="author" type="text" maxlength="60" placeholder="Your name" autocomplete="name" required>
-				<label for="comment-content-card-${post.id}" class="sr-only">Comment</label>
-				<textarea id="comment-content-card-${post.id}" name="content" rows="3" placeholder="Write a comment..." autocomplete="off" required></textarea>
-				<button type="submit" class="btn alt small-btn">Post comment</button>
-			</form>
+			<button type="button" class="comments-title comments-toggle" aria-expanded="false" aria-controls="comments-content-${post.id}">Show comments</button>
+			<div id="comments-content-${post.id}" class="comments-content" hidden>
+				<div class="comment-list"><div class="comment-empty">Open to load comments.</div></div>
+				<form class="comment-form" data-post-id="${post.id}">
+					<label for="comment-author-card-${post.id}" class="sr-only">Your name</label>
+					<input id="comment-author-card-${post.id}" name="author" type="text" maxlength="60" placeholder="Your name" autocomplete="name" required>
+					<label for="comment-content-card-${post.id}" class="sr-only">Comment</label>
+					<textarea id="comment-content-card-${post.id}" name="content" rows="3" placeholder="Write a comment..." autocomplete="off" required></textarea>
+					<button type="submit" class="btn alt small-btn">Post comment</button>
+				</form>
+			</div>
 		</div>
 	`
 	return el
@@ -431,11 +432,7 @@ async function render(){
 		postsEl.innerHTML = '<p class="small">No posts yet — create one above.</p>'
 		return
 	}
-	const withComments = await Promise.all(posts.map(async (post) => {
-		post.comments = await loadCommentsForPost(post.id)
-		return post
-	}))
-	withComments.slice().reverse().forEach(p=>postsEl.appendChild(createPostElement(p)))
+	posts.slice().reverse().forEach(post=>postsEl.appendChild(createPostElement(post)))
 	await renderModerationQueue()
 }
 
@@ -838,13 +835,47 @@ async function init(){
 	})
 
 	qs('#posts').addEventListener('click', async (e)=>{
-		const el = e.target
+		const el = e.target.closest('button') || e.target
 		const postEl = el.closest('.post')
 		if(postEl && el.closest('.post-title')){
 			const localImage = postEl.querySelector('img')
 			if(localImage){
 				localImage.style.display = localImage.style.display === 'none' ? 'block' : 'none'
 			}
+		}
+		if(el.classList.contains('comments-toggle') && postEl){
+			const content = postEl.querySelector('.comments-content')
+			if(!content) return
+			const expanded = el.getAttribute('aria-expanded') === 'true'
+			el.setAttribute('aria-expanded', String(!expanded))
+			content.hidden = expanded
+			if(expanded) return
+
+			if(content.dataset.loaded === 'true'){
+				el.textContent = `Hide comments (${content.dataset.count || 0})`
+				return
+			}
+
+			el.disabled = true
+			el.textContent = 'Loading comments...'
+			content.querySelector('.comment-list').innerHTML = '<div class="comment-empty">Loading comments...</div>'
+			const postId = Number(el.closest('.post').querySelector('.like')?.dataset.id)
+			try{
+				const comments = await loadCommentsForPost(postId)
+				content.dataset.loaded = 'true'
+				content.dataset.count = String(comments.length)
+				content.querySelector('.comment-list').innerHTML = renderCommentList(comments)
+				el.textContent = `Hide comments (${comments.length})`
+			}catch(err){
+				console.error(`Failed to load comments for post ${postId}:`, err.message)
+				content.querySelector('.comment-list').innerHTML = '<div class="comment-empty">Comments could not be loaded. Close and reopen to retry.</div>'
+				el.textContent = 'Comments unavailable'
+				el.setAttribute('aria-expanded', 'false')
+				content.hidden = true
+			}finally{
+				el.disabled = false
+			}
+			return
 		}
 		const id = Number(el.dataset.id)
 		if(el.classList.contains('delete')){
