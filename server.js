@@ -106,7 +106,7 @@ async function initDb(){
       status TEXT NOT NULL DEFAULT 'pending'
     )`,
     `CREATE TABLE IF NOT EXISTS post_likes (
-      post_id INTEGER NOT NULL,
+      post_id INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
       session_id TEXT NOT NULL,
       created_at TEXT NOT NULL,
       PRIMARY KEY (post_id, session_id)
@@ -125,7 +125,7 @@ async function initDb(){
   const migrations = [
     "ALTER TABLE posts ADD COLUMN status TEXT NOT NULL DEFAULT 'approved'",
     "ALTER TABLE comments ADD COLUMN status TEXT NOT NULL DEFAULT 'approved'",
-    "CREATE TABLE IF NOT EXISTS post_likes (post_id INTEGER NOT NULL, session_id TEXT NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY (post_id, session_id))"
+    "CREATE TABLE IF NOT EXISTS post_likes (post_id INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE, session_id TEXT NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY (post_id, session_id))"
   ]
   for(const sql of migrations){
     try{
@@ -133,6 +133,23 @@ async function initDb(){
     }catch(e){
       if(!/duplicate column name/i.test(e.message)) throw e
     }
+  }
+
+  const likeForeignKeys = await db.execute('PRAGMA foreign_key_list(post_likes)')
+  if(!likeForeignKeys.rows.some(row => row.table === 'posts' && row.from === 'post_id' && row.to === 'id')){
+    await db.batch([
+      `CREATE TABLE post_likes_with_post_fk (
+        post_id INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+        session_id TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        PRIMARY KEY (post_id, session_id)
+      )`,
+      `INSERT INTO post_likes_with_post_fk (post_id, session_id, created_at)
+       SELECT post_id, session_id, created_at FROM post_likes
+       WHERE EXISTS (SELECT 1 FROM posts WHERE posts.id = post_likes.post_id)`,
+      'DROP TABLE post_likes',
+      'ALTER TABLE post_likes_with_post_fk RENAME TO post_likes'
+    ], 'write')
   }
 
   const existingVisitsRow = await db.execute('SELECT total FROM visits WHERE id = 1')
@@ -300,6 +317,7 @@ app.delete('/api/posts/:id', async (req,res)=>{
     if(existing.rows.length === 0) return res.status(404).json({error: 'Post not found'})
     await db.batch([
       { sql: 'DELETE FROM posts WHERE id = ?', args: [id] },
+      { sql: 'DELETE FROM post_likes WHERE post_id = ?', args: [id] },
       { sql: 'DELETE FROM comments WHERE post_id = ?', args: [id] }
     ], 'write')
     res.json({success:true})
@@ -314,6 +332,7 @@ app.post('/api/import', async (req, res)=>{
   const data = req.body.posts
   if(!Array.isArray(data)) return res.status(400).json({error:'Expected array'})
   try{
+    await db.execute('DELETE FROM post_likes')
     await db.execute('DELETE FROM comments')
     await db.execute('DELETE FROM posts')
     for(const p of data){
