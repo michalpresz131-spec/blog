@@ -111,6 +111,12 @@ async function initDb(){
       created_at TEXT NOT NULL,
       PRIMARY KEY (post_id, session_id)
     )`,
+    `CREATE TABLE IF NOT EXISTS comment_likes (
+      comment_id INTEGER NOT NULL REFERENCES comments(id) ON DELETE CASCADE,
+      session_id TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      PRIMARY KEY (comment_id, session_id)
+    )`,
     `CREATE TABLE IF NOT EXISTS visits (
       id INTEGER PRIMARY KEY,
       total INTEGER NOT NULL DEFAULT 0
@@ -130,6 +136,7 @@ async function initDb(){
     "ALTER TABLE posts ADD COLUMN status TEXT NOT NULL DEFAULT 'approved'",
     "ALTER TABLE comments ADD COLUMN status TEXT NOT NULL DEFAULT 'approved'",
     "CREATE TABLE IF NOT EXISTS post_likes (post_id INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE, session_id TEXT NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY (post_id, session_id))",
+    "CREATE TABLE IF NOT EXISTS comment_likes (comment_id INTEGER NOT NULL REFERENCES comments(id) ON DELETE CASCADE, session_id TEXT NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY (comment_id, session_id))",
     "CREATE TABLE IF NOT EXISTS visit_sessions (session_id TEXT PRIMARY KEY, visited_at TEXT NOT NULL)"
   ]
   for(const sql of migrations){
@@ -343,6 +350,7 @@ app.delete('/api/posts/:id', async (req,res)=>{
     await db.batch([
       { sql: 'DELETE FROM posts WHERE id = ?', args: [id] },
       { sql: 'DELETE FROM post_likes WHERE post_id = ?', args: [id] },
+      { sql: 'DELETE FROM comment_likes WHERE comment_id IN (SELECT id FROM comments WHERE post_id = ?)', args: [id] },
       { sql: 'DELETE FROM comments WHERE post_id = ?', args: [id] }
     ], 'write')
     res.json({success:true})
@@ -358,6 +366,7 @@ app.post('/api/import', async (req, res)=>{
   if(!Array.isArray(data)) return res.status(400).json({error:'Expected array'})
   try{
     await db.execute('DELETE FROM post_likes')
+    await db.execute('DELETE FROM comment_likes')
     await db.execute('DELETE FROM comments')
     await db.execute('DELETE FROM posts')
     for(const p of data){
@@ -404,14 +413,56 @@ app.post('/api/posts/:id/like', async (req, res)=>{
 // Only approved comments are public.
 app.get('/api/posts/:id/comments', async (req, res)=>{
   const postId = Number(req.params.id)
+  const sessionId = req.get('X-Blog-Session')
   try{
     const result = await db.execute({
-      sql: "SELECT * FROM comments WHERE post_id = ? AND status = 'approved' ORDER BY date ASC",
-      args: [postId]
+      sql: `SELECT comments.*,
+                   (SELECT COUNT(*) FROM comment_likes WHERE comment_id = comments.id) AS likes,
+                   CASE WHEN EXISTS (
+                     SELECT 1 FROM comment_likes
+                     WHERE comment_id = comments.id AND session_id = ?
+                   ) THEN 1 ELSE 0 END AS liked
+            FROM comments
+            WHERE post_id = ? AND status = 'approved'
+            ORDER BY date ASC`,
+      args: [sessionId || '', postId]
     })
     res.json(result.rows)
   }catch(e){
     console.error('GET /api/posts/:id/comments failed:', e.message)
+    res.status(500).json({error: 'Database error'})
+  }
+})
+
+app.post('/api/comments/:id/like', async (req, res)=>{
+  const commentId = Number(req.params.id)
+  const sessionId = req.get('X-Blog-Session')
+  if(!sessionId || !/^[0-9a-f-]{36}$/i.test(sessionId)){
+    return res.status(400).json({error: 'Invalid browser session'})
+  }
+
+  try{
+    const comment = await db.execute({
+      sql: "SELECT id FROM comments WHERE id = ? AND status = 'approved'",
+      args: [commentId]
+    })
+    if(comment.rows.length === 0) return res.status(404).json({error: 'Comment not found'})
+
+    const insertedLike = await db.execute({
+      sql: 'INSERT INTO comment_likes (comment_id, session_id, created_at) VALUES (?, ?, ?) ON CONFLICT (comment_id, session_id) DO NOTHING',
+      args: [commentId, sessionId, new Date().toISOString()]
+    })
+    const result = await db.execute({
+      sql: 'SELECT COUNT(*) AS likes FROM comment_likes WHERE comment_id = ?',
+      args: [commentId]
+    })
+    res.json({
+      likes: Number(result.rows[0].likes),
+      alreadyLiked: insertedLike.rowsAffected === 0,
+      liked: true
+    })
+  }catch(e){
+    console.error('POST /api/comments/:id/like failed:', e.message)
     res.status(500).json({error: 'Database error'})
   }
 })
@@ -489,13 +540,17 @@ addModerationRoute('posts', 'approve', id =>
   db.execute({ sql: "UPDATE posts SET status = 'approved' WHERE id = ?", args: [id] }))
 addModerationRoute('posts', 'reject', id =>
   db.batch([
+    { sql: 'DELETE FROM comment_likes WHERE comment_id IN (SELECT id FROM comments WHERE post_id = ?)', args: [id] },
     { sql: 'DELETE FROM posts WHERE id = ?', args: [id] },
     { sql: 'DELETE FROM comments WHERE post_id = ?', args: [id] }
   ], 'write'))
 addModerationRoute('comments', 'approve', id =>
   db.execute({ sql: "UPDATE comments SET status = 'approved' WHERE id = ?", args: [id] }))
 addModerationRoute('comments', 'reject', id =>
-  db.execute({ sql: 'DELETE FROM comments WHERE id = ?', args: [id] }))
+  db.batch([
+    { sql: 'DELETE FROM comment_likes WHERE comment_id = ?', args: [id] },
+    { sql: 'DELETE FROM comments WHERE id = ?', args: [id] }
+  ], 'write'))
 
 // ---------- Static site ----------
 

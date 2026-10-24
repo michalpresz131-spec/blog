@@ -108,7 +108,9 @@ function normalizeComment(comment){
 		author: String(comment.author || 'Anonymous'),
 		content: String(comment.content || ''),
 		date: comment.date || new Date().toISOString(),
-		status: comment.status || 'approved'
+		status: comment.status || 'approved',
+		likes: Number(comment.likes) || 0,
+		liked: Boolean(Number(comment.liked))
 	}
 }
 
@@ -124,6 +126,7 @@ function renderCommentList(comments){
 				<span>${new Date(comment.date).toLocaleString()}</span>
 			</div>
 			<p>${escapeHtml(comment.content)}</p>
+			<button type="button" class="btn alt small-btn comment-like${comment.liked ? ' liked' : ''}" data-comment-id="${comment.id}" data-likes="${comment.likes}" aria-label="${comment.liked ? 'You liked this comment' : 'Like this comment'}" aria-pressed="${comment.liked}" ${comment.liked ? 'disabled' : ''}>❤️ ${comment.liked ? 'Liked ' : ''}${comment.likes}</button>
 		</div>
 	`).join('')
 }
@@ -135,7 +138,9 @@ async function loadCommentsForPost(postId){
 			.map(normalizeComment)
 	}
 	try{
-		const res = await fetch(`/api/posts/${postId}/comments`)
+		const res = await fetch(`/api/posts/${postId}/comments`, {
+			headers: {'X-Blog-Session': getLikeSessionId()}
+		})
 		if(!res.ok) throw new Error('API unavailable')
 		apiAvailable = true
 		return (await res.json()).map(normalizeComment)
@@ -144,6 +149,31 @@ async function loadCommentsForPost(postId){
 		return getLocalComments()
 			.filter(c => Number(c.post_id) === Number(postId) && (c.status === 'approved' || !('status' in c)))
 			.map(normalizeComment)
+	}
+}
+
+async function handleCommentLikeButtonClick(button, commentId){
+	if(!button || !Number.isFinite(Number(commentId))) return
+	if(button.disabled) return
+
+	button.disabled = true
+	try{
+		if(apiAvailable === false) throw new Error('The server is unavailable, so this like was not counted.')
+		const res = await fetch(`/api/comments/${commentId}/like`, {
+			method: 'POST',
+			headers: {'X-Blog-Session': getLikeSessionId()}
+		})
+		if(!res.ok) throw new Error(`Failed to like comment (server returned ${res.status}).`)
+		const data = await res.json()
+		button.dataset.likes = String(Number(data.likes) || 0)
+		button.classList.add('liked')
+		button.setAttribute('aria-label', 'You liked this comment')
+		button.setAttribute('aria-pressed', 'true')
+		button.textContent = `❤️ Liked ${Number(data.likes) || 0}`
+	}catch(e){
+		console.error('Failed to like comment:', e.message)
+		button.disabled = false
+		alert(e.message)
 	}
 }
 
@@ -849,6 +879,10 @@ async function init(){
 
 	qs('#posts').addEventListener('click', async (e)=>{
 		const el = e.target.closest('button') || e.target
+		if(el.classList.contains('comment-like')){
+			await handleCommentLikeButtonClick(el, Number(el.dataset.commentId))
+			return
+		}
 		const postEl = el.closest('.post')
 		if(postEl && el.closest('.post-title')){
 			const localImage = postEl.querySelector('img')
@@ -940,6 +974,12 @@ async function init(){
 				window.scrollTo({top:0,behavior:'smooth'})
 			}
 		}
+	})
+
+	document.addEventListener('click', async (e)=>{
+		const button = e.target.closest('.comment-like')
+		if(!button || qs('#posts').contains(button)) return
+		await handleCommentLikeButtonClick(button, Number(button.dataset.commentId))
 	})
 
 	qs('#posts').addEventListener('submit', async (e)=>{
