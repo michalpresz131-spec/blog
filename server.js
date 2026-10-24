@@ -7,7 +7,6 @@
 const express = require('express')
 const path = require('path')
 const fs = require('fs')
-const crypto = require('crypto')
 const { createClient } = require('@libsql/client')
 const nodemailer = require('nodemailer')
 const sharp = require('sharp')
@@ -150,31 +149,8 @@ const PUBLIC_DIR = __dirname
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*')
   res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS')
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Blog-Session')
   if(req.method === 'OPTIONS') return res.sendStatus(204)
-
-  const rawCookies = req.headers.cookie || ''
-  const cookieMap = {}
-  for(const pair of rawCookies.split(';')){
-    const trimmed = pair.trim()
-    if(!trimmed) continue
-    const idx = trimmed.indexOf('=')
-    const key = idx >= 0 ? trimmed.slice(0, idx) : trimmed
-    const value = idx >= 0 ? trimmed.slice(idx + 1) : ''
-    cookieMap[key] = decodeURIComponent(value)
-  }
-
-  if(!cookieMap.session_id){
-    const sessionId = crypto.randomUUID()
-    res.cookie('session_id', sessionId, {
-      httpOnly: true,
-      sameSite: 'lax',
-      path: '/'
-    })
-    req.sessionId = sessionId
-  } else {
-    req.sessionId = cookieMap.session_id
-  }
 
   next()
 })
@@ -355,23 +331,22 @@ app.post('/api/import', async (req, res)=>{
 
 app.post('/api/posts/:id/like', async (req, res)=>{
   const id = Number(req.params.id)
-  const sessionId = req.sessionId
+  const sessionId = req.get('X-Blog-Session')
+  if(!sessionId || !/^[0-9a-f-]{36}$/i.test(sessionId)){
+    return res.status(400).json({error: 'Invalid browser session'})
+  }
   try{
     const existing = await db.execute({ sql: 'SELECT id FROM posts WHERE id = ?', args: [id] })
     if(existing.rows.length === 0) return res.status(404).json({error: 'Post not found'})
-    if(!sessionId) return res.status(400).json({error: 'Missing browser session'})
 
-    const priorLike = await db.execute({
-      sql: 'SELECT 1 FROM post_likes WHERE post_id = ? AND session_id = ?',
-      args: [id, sessionId]
+    const insertedLike = await db.execute({
+      sql: 'INSERT INTO post_likes (post_id, session_id, created_at) VALUES (?, ?, ?) ON CONFLICT (post_id, session_id) DO NOTHING',
+      args: [id, sessionId, new Date().toISOString()]
     })
 
-    const alreadyLiked = priorLike.rows.length > 0
+    const alreadyLiked = insertedLike.rowsAffected === 0
     if(!alreadyLiked){
-      await db.batch([
-        { sql: 'INSERT INTO post_likes (post_id, session_id, created_at) VALUES (?, ?, ?)', args: [id, sessionId, new Date().toISOString()] },
-        { sql: 'UPDATE posts SET likes = likes + 1 WHERE id = ?', args: [id] }
-      ], 'write')
+      await db.execute({ sql: 'UPDATE posts SET likes = likes + 1 WHERE id = ?', args: [id] })
     }
 
     const row = await db.execute({ sql: 'SELECT likes FROM posts WHERE id = ?', args: [id] })

@@ -560,6 +560,7 @@ function clearDraft(){
 }
 
 const LIKE_STORAGE_KEY = 'simple-blog-liked-posts'
+const LIKE_SESSION_KEY = 'simple-blog-like-session'
 
 function getLikedPostIds(){
 	try{
@@ -569,6 +570,19 @@ function getLikedPostIds(){
 		return ids.map(Number).filter(id => Number.isFinite(id) && id > 0)
 	}catch(e){
 		return []
+	}
+}
+
+function getLikeSessionId(){
+	try{
+		let sessionId = sessionStorage.getItem(LIKE_SESSION_KEY)
+		if(!sessionId){
+			sessionId = crypto.randomUUID()
+			sessionStorage.setItem(LIKE_SESSION_KEY, sessionId)
+		}
+		return sessionId
+	}catch(e){
+		throw new Error('Browser session storage is unavailable; this post could not be liked.')
 	}
 }
 
@@ -624,7 +638,10 @@ async function handleLikeButtonClick(button, postId){
 			return
 		}
 
-		const res = await fetch(`/api/posts/${postId}/like`, {method: 'POST'})
+		const res = await fetch(`/api/posts/${postId}/like`, {
+			method: 'POST',
+			headers: {'X-Blog-Session': getLikeSessionId()}
+		})
 		if(!res.ok) throw new Error('Failed to like post')
 		const data = await res.json()
 		setPostLiked(postId)
