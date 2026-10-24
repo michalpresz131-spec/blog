@@ -248,7 +248,11 @@ function createPostElement(post){
 			` : ''}
 		</div>
 		<div class="comments-panel">
-			<button type="button" class="comments-title comments-toggle" aria-expanded="false" aria-controls="comments-content-${post.id}">Show comments</button>
+			<button type="button" class="comments-toggle" aria-label="Show comments" title="Show comments" aria-expanded="false" aria-controls="comments-content-${post.id}">
+				<svg aria-hidden="true" viewBox="0 0 24 24" focusable="false">
+					<path d="M20 11.5a7.5 7.5 0 0 1-7.5 7.5H5l-1 2v-5.5a7.5 7.5 0 1 1 16-4Z"></path>
+				</svg>
+			</button>
 			<div id="comments-content-${post.id}" class="comments-content" hidden>
 				<div class="comment-list"><div class="comment-empty">Open to load comments.</div></div>
 				<form class="comment-form" data-post-id="${post.id}">
@@ -849,15 +853,21 @@ async function init(){
 			const expanded = el.getAttribute('aria-expanded') === 'true'
 			el.setAttribute('aria-expanded', String(!expanded))
 			content.hidden = expanded
-			if(expanded) return
+			if(expanded){
+				el.setAttribute('aria-label', 'Show comments')
+				el.title = 'Show comments'
+				return
+			}
 
 			if(content.dataset.loaded === 'true'){
-				el.textContent = `Hide comments (${content.dataset.count || 0})`
+				el.setAttribute('aria-label', 'Hide comments')
+				el.title = 'Hide comments'
 				return
 			}
 
 			el.disabled = true
-			el.textContent = 'Loading comments...'
+			el.setAttribute('aria-label', 'Loading comments')
+			el.title = 'Loading comments'
 			content.querySelector('.comment-list').innerHTML = '<div class="comment-empty">Loading comments...</div>'
 			const postId = Number(el.closest('.post').querySelector('.like')?.dataset.id)
 			try{
@@ -865,11 +875,13 @@ async function init(){
 				content.dataset.loaded = 'true'
 				content.dataset.count = String(comments.length)
 				content.querySelector('.comment-list').innerHTML = renderCommentList(comments)
-				el.textContent = `Hide comments (${comments.length})`
+				el.setAttribute('aria-label', 'Hide comments')
+				el.title = 'Hide comments'
 			}catch(err){
 				console.error(`Failed to load comments for post ${postId}:`, err.message)
 				content.querySelector('.comment-list').innerHTML = '<div class="comment-empty">Comments could not be loaded. Close and reopen to retry.</div>'
-				el.textContent = 'Comments unavailable'
+				el.setAttribute('aria-label', 'Comments unavailable; activate to retry')
+				el.title = 'Comments unavailable; activate to retry'
 				el.setAttribute('aria-expanded', 'false')
 				content.hidden = true
 			}finally{
