@@ -241,7 +241,7 @@ function createPostElement(post){
 		${imageHtml}
 		<p>${escapeHtml(post.content)}</p>
 		<div class="actions">
-			<button data-id="${post.id}" class="btn alt like${liked ? ' liked' : ''}" ${liked ? 'disabled aria-pressed="true"' : 'aria-pressed="false"'}>👍 ${liked ? 'Liked ' : ''}${post.likes || 0}</button>
+			<button data-id="${post.id}" data-likes="${post.likes || 0}" class="btn alt like${liked ? ' liked' : ''}" ${liked ? 'disabled aria-pressed="true"' : 'aria-pressed="false"'}>👍 ${liked ? 'Liked ' : ''}${post.likes || 0}</button>
 			<button data-id="${post.id}" class="btn alt view">View</button>
 			<button data-id="${post.id}" class="btn alt edit">Edit</button>
 			${isModeratorLoggedIn() ? `
@@ -300,7 +300,7 @@ function showPostViewer(post){
 			${imageHtml}
 			<p>${escapeHtml(post.content)}</p>
 			<div class="viewer-stats">
-				<button type="button" class="btn alt like viewer-like" data-id="${post.id}" ${liked ? 'disabled aria-pressed="true"' : 'aria-pressed="false"'}>👍 ${liked ? 'Liked ' : ''}${post.likes || 0}</button>
+				<button type="button" class="btn alt like viewer-like" data-id="${post.id}" data-likes="${post.likes || 0}" ${liked ? 'disabled aria-pressed="true"' : 'aria-pressed="false"'}>👍 ${liked ? 'Liked ' : ''}${post.likes || 0}</button>
 			</div>
 			<div class="viewer-comments">
 				<div class="comments-title">Comments (${comments.length})</div>
@@ -564,10 +564,18 @@ const LIKE_SESSION_KEY = 'simple-blog-like-session'
 
 function getLikedPostIds(){
 	try{
-		const raw = sessionStorage.getItem(LIKE_STORAGE_KEY)
-		const parsed = raw ? JSON.parse(raw) : []
-		const ids = Array.isArray(parsed) ? parsed : []
-		return ids.map(Number).filter(id => Number.isFinite(id) && id > 0)
+		const localRaw = localStorage.getItem(LIKE_STORAGE_KEY)
+		const sessionRaw = sessionStorage.getItem(LIKE_STORAGE_KEY)
+		const localIds = localRaw ? JSON.parse(localRaw) : []
+		const sessionIds = sessionRaw ? JSON.parse(sessionRaw) : []
+		const ids = [...new Set([
+			...(Array.isArray(localIds) ? localIds : []),
+			...(Array.isArray(sessionIds) ? sessionIds : [])
+		].map(Number).filter(id => Number.isFinite(id) && id > 0))]
+		if(ids.length && JSON.stringify(ids) !== localRaw){
+			localStorage.setItem(LIKE_STORAGE_KEY, JSON.stringify(ids))
+		}
+		return ids
 	}catch(e){
 		return []
 	}
@@ -575,21 +583,46 @@ function getLikedPostIds(){
 
 function getLikeSessionId(){
 	try{
-		let sessionId = sessionStorage.getItem(LIKE_SESSION_KEY)
-		if(!sessionId){
-			sessionId = crypto.randomUUID()
-			sessionStorage.setItem(LIKE_SESSION_KEY, sessionId)
+		const cookiePrefix = `${LIKE_SESSION_KEY}=`
+		const cookie = document.cookie.split(';')
+			.map(part => part.trim())
+			.find(part => part.startsWith(cookiePrefix))
+		const cookieSessionId = cookie ? decodeURIComponent(cookie.slice(cookiePrefix.length)) : null
+		const previousSessionId = localStorage.getItem(LIKE_SESSION_KEY)
+
+		if(cookieSessionId && /^[0-9a-f-]{36}$/i.test(cookieSessionId)){
+			if(previousSessionId && previousSessionId !== cookieSessionId){
+				localStorage.removeItem(LIKE_STORAGE_KEY)
+				sessionStorage.removeItem(LIKE_STORAGE_KEY)
+			}
+			localStorage.setItem(LIKE_SESSION_KEY, cookieSessionId)
+			return cookieSessionId
 		}
-		return sessionId
+
+		const sessionId = sessionStorage.getItem(LIKE_SESSION_KEY) || crypto.randomUUID()
+		const secure = location.protocol === 'https:' ? '; Secure' : ''
+		document.cookie = `${LIKE_SESSION_KEY}=${encodeURIComponent(sessionId)}; Path=/; SameSite=Lax${secure}`
+		const savedCookie = document.cookie.split(';')
+			.map(part => part.trim())
+			.find(part => part.startsWith(cookiePrefix))
+		const savedSessionId = savedCookie ? decodeURIComponent(savedCookie.slice(cookiePrefix.length)) : null
+
+		if(savedSessionId && previousSessionId && previousSessionId !== savedSessionId){
+			localStorage.removeItem(LIKE_STORAGE_KEY)
+			sessionStorage.removeItem(LIKE_STORAGE_KEY)
+		}
+		const activeSessionId = savedSessionId || previousSessionId || sessionId
+		localStorage.setItem(LIKE_SESSION_KEY, activeSessionId)
+		return activeSessionId
 	}catch(e){
-		throw new Error('Browser session storage is unavailable; this post could not be liked.')
+		throw new Error('Browser storage is unavailable; this post could not be liked.')
 	}
 }
 
 function saveLikedPostIds(ids){
 	try{
 		const uniqueIds = [...new Set((ids || []).map(Number).filter(id => Number.isFinite(id) && id > 0))]
-		sessionStorage.setItem(LIKE_STORAGE_KEY, JSON.stringify(uniqueIds))
+		localStorage.setItem(LIKE_STORAGE_KEY, JSON.stringify(uniqueIds))
 	}catch(e){}
 }
 
@@ -610,6 +643,7 @@ function setPostLiked(postId){
 function setLikeButtonState(button, postId, likes, liked){
 	if(!button || !Number.isFinite(Number(postId))) return
 	const count = Number(likes) || 0
+	button.dataset.likes = String(count)
 	button.disabled = Boolean(liked)
 	button.classList.toggle('liked', Boolean(liked))
 	button.setAttribute('aria-pressed', String(Boolean(liked)))
@@ -691,6 +725,20 @@ async function loadVisitCount(){
 
 async function init(){
 	await loadVisitCount()
+	try{
+		getLikeSessionId()
+	}catch(e){
+		console.error('Failed to initialize browser session for likes:', e.message)
+	}
+	window.addEventListener('storage', (event)=>{
+		if(event.key !== LIKE_STORAGE_KEY || !event.newValue) return
+		document.querySelectorAll('.like').forEach(button=>{
+			const postId = Number(button.dataset.id)
+			if(Number.isFinite(postId) && isPostLiked(postId)){
+				setLikeButtonState(button, postId, Number(button.dataset.likes) || 0, true)
+			}
+		})
+	})
 	const form = qs('#postForm')
 	const title = qs('#title')
 	const content = qs('#content')
