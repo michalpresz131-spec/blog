@@ -7,6 +7,7 @@
 const express = require('express')
 const path = require('path')
 const fs = require('fs')
+const crypto = require('crypto')
 const { createClient } = require('@libsql/client')
 const nodemailer = require('nodemailer')
 const sharp = require('sharp')
@@ -105,6 +106,12 @@ async function initDb(){
       date TEXT NOT NULL,
       status TEXT NOT NULL DEFAULT 'pending'
     )`,
+    `CREATE TABLE IF NOT EXISTS post_likes (
+      post_id INTEGER NOT NULL,
+      session_id TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      PRIMARY KEY (post_id, session_id)
+    )`,
     `CREATE TABLE IF NOT EXISTS visits (
       id INTEGER PRIMARY KEY,
       total INTEGER NOT NULL DEFAULT 0
@@ -118,7 +125,8 @@ async function initDb(){
   // "column already exists" is caught and ignored.
   const migrations = [
     "ALTER TABLE posts ADD COLUMN status TEXT NOT NULL DEFAULT 'approved'",
-    "ALTER TABLE comments ADD COLUMN status TEXT NOT NULL DEFAULT 'approved'"
+    "ALTER TABLE comments ADD COLUMN status TEXT NOT NULL DEFAULT 'approved'",
+    "CREATE TABLE IF NOT EXISTS post_likes (post_id INTEGER NOT NULL, session_id TEXT NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY (post_id, session_id))"
   ]
   for(const sql of migrations){
     try{
@@ -144,6 +152,30 @@ app.use((req, res, next) => {
   res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS')
   res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization')
   if(req.method === 'OPTIONS') return res.sendStatus(204)
+
+  const rawCookies = req.headers.cookie || ''
+  const cookieMap = {}
+  for(const pair of rawCookies.split(';')){
+    const trimmed = pair.trim()
+    if(!trimmed) continue
+    const idx = trimmed.indexOf('=')
+    const key = idx >= 0 ? trimmed.slice(0, idx) : trimmed
+    const value = idx >= 0 ? trimmed.slice(idx + 1) : ''
+    cookieMap[key] = decodeURIComponent(value)
+  }
+
+  if(!cookieMap.session_id){
+    const sessionId = crypto.randomUUID()
+    res.cookie('session_id', sessionId, {
+      httpOnly: true,
+      sameSite: 'lax',
+      path: '/'
+    })
+    req.sessionId = sessionId
+  } else {
+    req.sessionId = cookieMap.session_id
+  }
+
   next()
 })
 
@@ -323,12 +355,27 @@ app.post('/api/import', async (req, res)=>{
 
 app.post('/api/posts/:id/like', async (req, res)=>{
   const id = Number(req.params.id)
+  const sessionId = req.sessionId
   try{
     const existing = await db.execute({ sql: 'SELECT id FROM posts WHERE id = ?', args: [id] })
     if(existing.rows.length === 0) return res.status(404).json({error: 'Post not found'})
-    await db.execute({ sql: 'UPDATE posts SET likes = likes + 1 WHERE id = ?', args: [id] })
+    if(!sessionId) return res.status(400).json({error: 'Missing browser session'})
+
+    const priorLike = await db.execute({
+      sql: 'SELECT 1 FROM post_likes WHERE post_id = ? AND session_id = ?',
+      args: [id, sessionId]
+    })
+
+    const alreadyLiked = priorLike.rows.length > 0
+    if(!alreadyLiked){
+      await db.batch([
+        { sql: 'INSERT INTO post_likes (post_id, session_id, created_at) VALUES (?, ?, ?)', args: [id, sessionId, new Date().toISOString()] },
+        { sql: 'UPDATE posts SET likes = likes + 1 WHERE id = ?', args: [id] }
+      ], 'write')
+    }
+
     const row = await db.execute({ sql: 'SELECT likes FROM posts WHERE id = ?', args: [id] })
-    res.json({likes: Number(row.rows[0].likes)})
+    res.json({likes: Number(row.rows[0].likes), alreadyLiked, liked: true})
   }catch(e){
     console.error('POST /api/posts/:id/like failed:', e.message)
     res.status(500).json({error: 'Database error'})

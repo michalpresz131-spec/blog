@@ -234,13 +234,14 @@ function createPostElement(post){
 		imageHtml = `<img data-loaded="true" src="${escapeHtml(imgSrc)}" loading="lazy" decoding="async" alt="" style="width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:8px;margin-bottom:12px">`
 	}
 	const comments = Array.isArray(post.comments) ? post.comments : []
+	const liked = isPostLiked(post.id)
 	el.innerHTML = `
 		<button type="button" class="post-title">${escapeHtml(post.title)}</button>
 		<div class="meta">${new Date(post.date).toLocaleString()}</div>
 		${imageHtml}
 		<p>${escapeHtml(post.content)}</p>
 		<div class="actions">
-			<button data-id="${post.id}" class="btn alt like">👍 ${post.likes || 0}</button>
+			<button data-id="${post.id}" class="btn alt like${liked ? ' liked' : ''}" ${liked ? 'disabled aria-pressed="true"' : 'aria-pressed="false"'}>👍 ${liked ? 'Liked ' : ''}${post.likes || 0}</button>
 			<button data-id="${post.id}" class="btn alt view">View</button>
 			<button data-id="${post.id}" class="btn alt edit">Edit</button>
 			${isModeratorLoggedIn() ? `
@@ -287,6 +288,7 @@ function showPostViewer(post){
 	const imgSrc = postImageSrc(post)
 	const imageHtml = imgSrc ? `<img src="${escapeHtml(imgSrc)}" alt="${escapeHtml(post.title)}" class="viewer-image">` : ''
 	const comments = Array.isArray(post.comments) ? post.comments : []
+	const liked = isPostLiked(post.id)
 	viewer.classList.remove('hidden')
 	viewer.setAttribute('aria-hidden', 'false')
 	viewer.innerHTML = `
@@ -297,7 +299,9 @@ function showPostViewer(post){
 			<div class="meta">${new Date(post.date).toLocaleString()}</div>
 			${imageHtml}
 			<p>${escapeHtml(post.content)}</p>
-			<div class="viewer-stats">👍 ${post.likes || 0}</div>
+			<div class="viewer-stats">
+				<button type="button" class="btn alt like viewer-like" data-id="${post.id}" ${liked ? 'disabled aria-pressed="true"' : 'aria-pressed="false"'}>👍 ${liked ? 'Liked ' : ''}${post.likes || 0}</button>
+			</div>
 			<div class="viewer-comments">
 				<div class="comments-title">Comments (${comments.length})</div>
 				<div class="comment-list">${renderCommentList(comments)}</div>
@@ -313,6 +317,12 @@ function showPostViewer(post){
 	`
 	viewer.querySelector('.viewer-close').addEventListener('click', closePostViewer)
 	viewer.querySelector('.post-viewer-backdrop').addEventListener('click', closePostViewer)
+	const likeButton = viewer.querySelector('.viewer-like')
+	if(likeButton){
+		likeButton.addEventListener('click', async()=>{
+			await handleLikeButtonClick(likeButton, Number(post.id))
+		})
+	}
 	const form = viewer.querySelector('.comment-form')
 	if(form){
 		form.addEventListener('submit', async (e)=>{
@@ -549,6 +559,82 @@ function clearDraft(){
 	try{ localStorage.removeItem(DRAFT_KEY) }catch(e){}
 }
 
+const LIKE_STORAGE_KEY = 'simple-blog-liked-posts'
+
+function getLikedPostIds(){
+	try{
+		const raw = sessionStorage.getItem(LIKE_STORAGE_KEY)
+		const parsed = raw ? JSON.parse(raw) : []
+		const ids = Array.isArray(parsed) ? parsed : []
+		return ids.map(Number).filter(id => Number.isFinite(id) && id > 0)
+	}catch(e){
+		return []
+	}
+}
+
+function saveLikedPostIds(ids){
+	try{
+		const uniqueIds = [...new Set((ids || []).map(Number).filter(id => Number.isFinite(id) && id > 0))]
+		sessionStorage.setItem(LIKE_STORAGE_KEY, JSON.stringify(uniqueIds))
+	}catch(e){}
+}
+
+function isPostLiked(postId){
+	return getLikedPostIds().includes(Number(postId))
+}
+
+function setPostLiked(postId){
+	const id = Number(postId)
+	if(!Number.isFinite(id)) return
+	const likedIds = getLikedPostIds()
+	if(!likedIds.includes(id)){
+		likedIds.push(id)
+		saveLikedPostIds(likedIds)
+	}
+}
+
+function setLikeButtonState(button, postId, likes, liked){
+	if(!button || !Number.isFinite(Number(postId))) return
+	const count = Number(likes) || 0
+	button.disabled = Boolean(liked)
+	button.classList.toggle('liked', Boolean(liked))
+	button.setAttribute('aria-pressed', String(Boolean(liked)))
+	button.textContent = liked ? `👍 Liked ${count}` : `👍 ${count}`
+}
+
+async function handleLikeButtonClick(button, postId){
+	if(!button || !Number.isFinite(Number(postId))) return
+	if(isPostLiked(postId)){
+		const count = Number(button.dataset.likes || button.textContent.match(/\d+/)?.[0] || 0)
+		setLikeButtonState(button, postId, count, true)
+		return
+	}
+
+	try{
+		if(apiAvailable === false){
+			const posts = await loadLocalPosts()
+			const post = posts.find(p => Number(p.id) === Number(postId))
+			if(post){
+				post.likes = (post.likes || 0) + 1
+				saveLocalPosts(posts)
+			}
+			setPostLiked(postId)
+			const updatedLikes = Number(post?.likes || 0)
+			setLikeButtonState(button, postId, updatedLikes, true)
+			return
+		}
+
+		const res = await fetch(`/api/posts/${postId}/like`, {method: 'POST'})
+		if(!res.ok) throw new Error('Failed to like post')
+		const data = await res.json()
+		setPostLiked(postId)
+		setLikeButtonState(button, postId, Number(data.likes) || 0, true)
+	}catch(e){
+		console.error('Failed to like post:', e.message)
+		button.disabled = false
+	}
+}
+
 function setEditingUI(isEditing, publishBtn, cancelBtn){
 	if(isEditing){
 		publishBtn.textContent = 'Save'
@@ -719,25 +805,7 @@ async function init(){
 			}
 		} else if(el.classList.contains('like')){
 			if(!isNaN(id)){
-				try{
-					if(apiAvailable === false){
-						const posts = await loadLocalPosts()
-						const post = posts.find(p=>p.id === id)
-						if(post){
-							post.likes = (post.likes || 0) + 1
-							saveLocalPosts(posts)
-							el.textContent = `👍 ${post.likes}`
-						}
-						return
-					}
-					const res = await fetch(`/api/posts/${id}/like`, {method: 'POST'})
-					if(res.ok){
-						const data = await res.json()
-						el.textContent = `👍 ${data.likes}`
-					}
-				}catch(e){
-					console.error('Failed to like post:', e.message)
-				}
+				await handleLikeButtonClick(el, id)
 			}
 		} else if(el.classList.contains('edit')){
 			if(isNaN(id)) return
