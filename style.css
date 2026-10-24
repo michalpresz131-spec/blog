@@ -67,11 +67,12 @@ form input[type="file"]{padding:8px;max-width:100%}
 .post .actions{display:flex;gap:8px;flex-wrap:wrap}
 .comments-panel,.viewer-comments{margin-top:16px;padding-top:12px;border-top:1px solid #e6e9ef}
 .comments-title{font-weight:700;margin-bottom:8px}
-.comments-toggle{display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;padding:8px;border:1px solid rgba(37,99,235,0.2);border-radius:50%;background:transparent;color:var(--accent);cursor:pointer}
+.comments-toggle{position:relative;display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;padding:8px;border:1px solid rgba(37,99,235,0.2);border-radius:50%;background:transparent;color:var(--accent);cursor:pointer}
 .comments-toggle:hover{background:rgba(37,99,235,0.08)}
 .comments-toggle:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .comments-toggle:disabled{cursor:wait;opacity:0.6}
 .comments-toggle svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.comments-count{position:absolute;top:-5px;right:-5px;min-width:18px;height:18px;padding:0 4px;border-radius:9px;background:var(--accent);color:#fff;font-size:11px;font-weight:700;line-height:18px;text-align:center}
 .comment-list{display:grid;gap:10px}
 .comment-item{background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px 12px}
 .comment-head{display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:6px;font-size:12px;color:var(--muted)}

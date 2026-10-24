@@ -214,7 +214,9 @@ app.get('/api/posts', async (req, res)=>{
   try{
     const result = await db.execute(
       `SELECT id, title, content, date, likes,
-              CASE WHEN image IS NOT NULL THEN 1 ELSE 0 END AS has_image
+              CASE WHEN image IS NOT NULL THEN 1 ELSE 0 END AS has_image,
+              (SELECT COUNT(*) FROM comments
+               WHERE comments.post_id = posts.id AND comments.status = 'approved') AS comment_count
        FROM posts WHERE status = 'approved' ORDER BY date ASC`
     )
     res.json(result.rows)

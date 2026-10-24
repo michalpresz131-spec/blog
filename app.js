@@ -258,6 +258,9 @@ async function fetchPendingItems(){
 function createPostElement(post){
 	const el = document.createElement('article')
 	el.className = 'post'
+	const commentCount = Number(post.comment_count ?? getLocalComments()
+		.filter(comment => Number(comment.post_id) === Number(post.id) && (comment.status === 'approved' || !('status' in comment)))
+		.length) || 0
 	let imageHtml = ''
 	const imgSrc = postImageSrc(post)
 	if(imgSrc){
@@ -278,10 +281,11 @@ function createPostElement(post){
 			` : ''}
 		</div>
 		<div class="comments-panel">
-			<button type="button" class="comments-toggle" aria-label="Show comments" title="Show comments" aria-expanded="false" aria-controls="comments-content-${post.id}">
+			<button type="button" class="comments-toggle" aria-label="Show comments (${commentCount})" title="Show comments (${commentCount})" aria-expanded="false" aria-controls="comments-content-${post.id}">
 				<svg aria-hidden="true" viewBox="0 0 24 24" focusable="false">
 					<path d="M20 11.5a7.5 7.5 0 0 1-7.5 7.5H5l-1 2v-5.5a7.5 7.5 0 1 1 16-4Z"></path>
 				</svg>
+				<span class="comments-count" aria-hidden="true">${commentCount}</span>
 			</button>
 			<div id="comments-content-${post.id}" class="comments-content" hidden>
 				<div class="comment-list"><div class="comment-empty">Open to load comments.</div></div>
@@ -897,19 +901,21 @@ async function init(){
 			el.setAttribute('aria-expanded', String(!expanded))
 			content.hidden = expanded
 			if(expanded){
-				el.setAttribute('aria-label', 'Show comments')
-				el.title = 'Show comments'
+				const count = el.querySelector('.comments-count').textContent
+				el.setAttribute('aria-label', `Show comments (${count})`)
+				el.title = `Show comments (${count})`
 				return
 			}
 
 			if(content.dataset.loaded === 'true'){
-				el.setAttribute('aria-label', 'Hide comments')
-				el.title = 'Hide comments'
+				const count = el.querySelector('.comments-count').textContent
+				el.setAttribute('aria-label', `Hide comments (${count})`)
+				el.title = `Hide comments (${count})`
 				return
 			}
 
 			el.disabled = true
-			el.setAttribute('aria-label', 'Loading comments')
+			el.setAttribute('aria-label', `Loading comments (${el.querySelector('.comments-count').textContent})`)
 			el.title = 'Loading comments'
 			content.querySelector('.comment-list').innerHTML = '<div class="comment-empty">Loading comments...</div>'
 			const postId = Number(el.closest('.post').querySelector('.like')?.dataset.id)
@@ -917,13 +923,15 @@ async function init(){
 				const comments = await loadCommentsForPost(postId)
 				content.dataset.loaded = 'true'
 				content.dataset.count = String(comments.length)
+				el.querySelector('.comments-count').textContent = String(comments.length)
 				content.querySelector('.comment-list').innerHTML = renderCommentList(comments)
-				el.setAttribute('aria-label', 'Hide comments')
-				el.title = 'Hide comments'
+				el.setAttribute('aria-label', `Hide comments (${comments.length})`)
+				el.title = `Hide comments (${comments.length})`
 			}catch(err){
 				console.error(`Failed to load comments for post ${postId}:`, err.message)
 				content.querySelector('.comment-list').innerHTML = '<div class="comment-empty">Comments could not be loaded. Close and reopen to retry.</div>'
-				el.setAttribute('aria-label', 'Comments unavailable; activate to retry')
+				const count = el.querySelector('.comments-count').textContent
+				el.setAttribute('aria-label', `Comments unavailable (${count}); activate to retry`)
 				el.title = 'Comments unavailable; activate to retry'
 				el.setAttribute('aria-expanded', 'false')
 				content.hidden = true
