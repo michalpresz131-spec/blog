@@ -114,6 +114,10 @@ async function initDb(){
     `CREATE TABLE IF NOT EXISTS visits (
       id INTEGER PRIMARY KEY,
       total INTEGER NOT NULL DEFAULT 0
+    )`,
+    `CREATE TABLE IF NOT EXISTS visit_sessions (
+      session_id TEXT PRIMARY KEY,
+      visited_at TEXT NOT NULL
     )`
   ], 'write')
 
@@ -125,7 +129,8 @@ async function initDb(){
   const migrations = [
     "ALTER TABLE posts ADD COLUMN status TEXT NOT NULL DEFAULT 'approved'",
     "ALTER TABLE comments ADD COLUMN status TEXT NOT NULL DEFAULT 'approved'",
-    "CREATE TABLE IF NOT EXISTS post_likes (post_id INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE, session_id TEXT NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY (post_id, session_id))"
+    "CREATE TABLE IF NOT EXISTS post_likes (post_id INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE, session_id TEXT NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY (post_id, session_id))",
+    "CREATE TABLE IF NOT EXISTS visit_sessions (session_id TEXT PRIMARY KEY, visited_at TEXT NOT NULL)"
   ]
   for(const sql of migrations){
     try{
@@ -238,10 +243,30 @@ app.get('/api/posts/:id/image', async (req, res)=>{
 })
 
 app.get('/api/visits', async (req, res)=>{
+  const sessionId = req.get('X-Blog-Session')
+  if(!sessionId || !/^[0-9a-f-]{36}$/i.test(sessionId)){
+    return res.status(400).json({error: 'Invalid browser session'})
+  }
+
   try{
-    await db.execute('UPDATE visits SET total = total + 1 WHERE id = 1')
-    const row = await db.execute('SELECT total FROM visits WHERE id = 1')
-    res.json({visits: Number(row.rows[0]?.total) || 0})
+    const transaction = await db.transaction('write')
+    try{
+      const insertedSession = await transaction.execute({
+        sql: 'INSERT INTO visit_sessions (session_id, visited_at) VALUES (?, ?) ON CONFLICT (session_id) DO NOTHING',
+        args: [sessionId, new Date().toISOString()]
+      })
+      if(insertedSession.rowsAffected > 0){
+        await transaction.execute('UPDATE visits SET total = total + 1 WHERE id = 1')
+      }
+      const row = await transaction.execute('SELECT total FROM visits WHERE id = 1')
+      await transaction.commit()
+      res.json({visits: Number(row.rows[0]?.total) || 0})
+    }catch(e){
+      await transaction.rollback()
+      throw e
+    }finally{
+      transaction.close()
+    }
   }catch(e){
     console.error('GET /api/visits failed:', e.message)
     res.status(500).json({error: 'Database error'})

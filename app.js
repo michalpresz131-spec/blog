@@ -562,6 +562,7 @@ function clearDraft(){
 
 const LIKE_STORAGE_KEY = 'simple-blog-liked-posts'
 const LIKE_SESSION_KEY = 'simple-blog-like-session'
+const VISIT_SESSION_KEY = 'simple-blog-visit-session'
 
 function getLikedPostIds(){
 	try{
@@ -692,7 +693,10 @@ async function loadVisitCount(){
 	if(!counter) return
 
 	try{
-		const res = await fetch('/api/visits')
+		const sessionId = getLikeSessionId()
+		const res = await fetch('/api/visits', {
+			headers: {'X-Blog-Session': sessionId}
+		})
 		if(!res.ok) throw new Error('API unavailable')
 		const data = await res.json()
 		const visits = Number(data.visits) || 0
@@ -704,9 +708,14 @@ async function loadVisitCount(){
 
 	// Local fallback (server unreachable)
 	try{
+		const sessionId = getLikeSessionId()
 		const raw = localStorage.getItem('simple-blog-visits')
-		const visits = (raw ? Number(raw) || 0 : 0) + 1
-		localStorage.setItem('simple-blog-visits', String(visits))
+		let visits = raw ? Number(raw) || 0 : 0
+		if(localStorage.getItem(VISIT_SESSION_KEY) !== sessionId){
+			visits += 1
+			localStorage.setItem('simple-blog-visits', String(visits))
+			localStorage.setItem(VISIT_SESSION_KEY, sessionId)
+		}
 		counter.textContent = `Total visits: ${visits.toLocaleString()}`
 	}catch(err){
 		counter.textContent = 'Total visits: 0'
@@ -715,12 +724,12 @@ async function loadVisitCount(){
 }
 
 async function init(){
-	await loadVisitCount()
 	try{
 		getLikeSessionId()
 	}catch(e){
 		console.error('Failed to initialize browser session for likes:', e.message)
 	}
+	await loadVisitCount()
 	window.addEventListener('storage', (event)=>{
 		if(event.key !== LIKE_STORAGE_KEY || !event.newValue) return
 		document.querySelectorAll('.like').forEach(button=>{
