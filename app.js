@@ -659,30 +659,20 @@ async function handleLikeButtonClick(button, postId){
 	}
 
 	try{
-		if(apiAvailable === false){
-			const posts = await loadLocalPosts()
-			const post = posts.find(p => Number(p.id) === Number(postId))
-			if(post){
-				post.likes = (post.likes || 0) + 1
-				saveLocalPosts(posts)
-			}
-			setPostLiked(postId)
-			const updatedLikes = Number(post?.likes || 0)
-			setLikeButtonState(button, postId, updatedLikes, true)
-			return
-		}
+		if(apiAvailable === false) throw new Error('The server is unavailable, so this like was not counted.')
 
 		const res = await fetch(`/api/posts/${postId}/like`, {
 			method: 'POST',
 			headers: {'X-Blog-Session': getLikeSessionId()}
 		})
-		if(!res.ok) throw new Error('Failed to like post')
+		if(!res.ok) throw new Error(`Failed to like post (server returned ${res.status}).`)
 		const data = await res.json()
 		setPostLiked(postId)
 		setLikeButtonState(button, postId, Number(data.likes) || 0, true)
 	}catch(e){
 		console.error('Failed to like post:', e.message)
 		button.disabled = false
+		alert(e.message)
 	}
 }
 
