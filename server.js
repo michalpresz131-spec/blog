@@ -106,6 +106,8 @@ async function initDb(){
       status TEXT NOT NULL DEFAULT 'pending'
     )`,
     'CREATE INDEX IF NOT EXISTS comments_post_id_idx ON comments(post_id)',
+    'CREATE INDEX IF NOT EXISTS idx_comments_post_status ON comments(post_id, status)',
+    'CREATE INDEX IF NOT EXISTS idx_posts_status_date ON posts(status, date)',
     `CREATE TABLE IF NOT EXISTS post_likes (
       post_id INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
       session_id TEXT NOT NULL,
