@@ -242,8 +242,8 @@ app.get('/api/posts/:id/image', async (req, res)=>{
     const [, mime, base64] = match
     const image = await sharp(Buffer.from(base64, 'base64'))
       .rotate()
-      .resize({width: 1600, height: 1600, fit: 'inside', withoutEnlargement: true})
-      .jpeg({quality: 75})
+      .resize({width: 1200, height: 1200, fit: 'inside', withoutEnlargement: true})
+      .jpeg({quality: 72, progressive: true})
       .toBuffer()
     res.set('Content-Type', 'image/jpeg')
     res.set('Cache-Control', 'public, max-age=31536000, immutable')

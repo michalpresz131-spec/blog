@@ -29,7 +29,7 @@ if(API_BASE_URL){
 // resolves to the URL an <img> tag should use either way.
 function postImageSrc(post){
 	if(post.image) return post.image
-	if(post.has_image) return apiUrl(`/api/posts/${post.id}/image?v=orientation-fix-${encodeURIComponent(post.date || '1')}`)
+	if(post.has_image) return apiUrl(`/api/posts/${post.id}/image?v=image-v2-${encodeURIComponent(post.date || '1')}`)
 	return null
 }
 
@@ -255,7 +255,7 @@ async function fetchPendingItems(){
 	}
 }
 
-function createPostElement(post){
+function createPostElement(post, prioritizeImage = false){
 	const el = document.createElement('article')
 	el.className = 'post'
 	const commentCount = Number(post.comment_count ?? getLocalComments()
@@ -264,7 +264,7 @@ function createPostElement(post){
 	let imageHtml = ''
 	const imgSrc = postImageSrc(post)
 	if(imgSrc){
-		imageHtml = `<img data-loaded="true" src="${escapeHtml(imgSrc)}" loading="lazy" decoding="async" alt="" style="width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:8px;margin-bottom:12px">`
+		imageHtml = `<img data-loaded="true" src="${escapeHtml(imgSrc)}" loading="${prioritizeImage ? 'eager' : 'lazy'}" ${prioritizeImage ? 'fetchpriority="high"' : ''} decoding="async" alt="" style="width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:8px;margin-bottom:12px">`
 	}
 	const liked = isPostLiked(post.id)
 	el.innerHTML = `
@@ -325,7 +325,7 @@ function closePostViewer(){
 function showPostViewer(post){
 	const viewer = ensurePostViewer()
 	const imgSrc = postImageSrc(post)
-	const imageHtml = imgSrc ? `<img src="${escapeHtml(imgSrc)}" alt="${escapeHtml(post.title)}" class="viewer-image">` : ''
+	const imageHtml = imgSrc ? `<img src="${escapeHtml(imgSrc)}" alt="${escapeHtml(post.title)}" class="viewer-image" fetchpriority="high" decoding="async">` : ''
 	const comments = Array.isArray(post.comments) ? post.comments : []
 	const liked = isPostLiked(post.id)
 	viewer.classList.remove('hidden')
@@ -470,7 +470,9 @@ async function render(){
 		postsEl.innerHTML = '<p class="small">No posts yet — create one above.</p>'
 		return
 	}
-	posts.slice().reverse().forEach(post=>postsEl.appendChild(createPostElement(post)))
+	const newestFirst = posts.slice().reverse()
+	const firstImagePost = newestFirst.find(post => postImageSrc(post))
+	newestFirst.forEach(post=>postsEl.appendChild(createPostElement(post, post === firstImagePost)))
 	await renderModerationQueue()
 }
 
