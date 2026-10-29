@@ -106,8 +106,6 @@ async function initDb(){
       status TEXT NOT NULL DEFAULT 'pending'
     )`,
     'CREATE INDEX IF NOT EXISTS comments_post_id_idx ON comments(post_id)',
-    'CREATE INDEX IF NOT EXISTS idx_comments_post_status ON comments(post_id, status)',
-    'CREATE INDEX IF NOT EXISTS idx_posts_status_date ON posts(status, date)',
     `CREATE TABLE IF NOT EXISTS post_likes (
       post_id INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
       session_id TEXT NOT NULL,
@@ -130,27 +128,29 @@ async function initDb(){
     )`
   ], 'write')
 
-  // Migration: if posts/comments tables already existed (from before the
-  // moderation feature), they won't have a `status` column yet. Add it,
-  // defaulting existing rows to 'approved' so already-published content
-  // doesn't disappear. This is safe to run every startup — the error for
-  // "column already exists" is caught and ignored.
-  const migrations = [
-    "ALTER TABLE posts ADD COLUMN status TEXT NOT NULL DEFAULT 'approved'",
-    "ALTER TABLE comments ADD COLUMN status TEXT NOT NULL DEFAULT 'approved'",
-    "CREATE TABLE IF NOT EXISTS post_likes (post_id INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE, session_id TEXT NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY (post_id, session_id))",
-    "CREATE TABLE IF NOT EXISTS comment_likes (comment_id INTEGER NOT NULL REFERENCES comments(id) ON DELETE CASCADE, session_id TEXT NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY (comment_id, session_id))",
-    "CREATE TABLE IF NOT EXISTS visit_sessions (session_id TEXT PRIMARY KEY, visited_at TEXT NOT NULL)"
-  ]
-  for(const sql of migrations){
-    try{
-      await db.execute(sql)
-    }catch(e){
-      if(!/duplicate column name/i.test(e.message)) throw e
-    }
+  // Read schema metadata together to avoid serial migration round trips.
+  const [postsColumns, commentsColumns, likeForeignKeys] = await Promise.all([
+    db.execute('PRAGMA table_info(posts)'),
+    db.execute('PRAGMA table_info(comments)'),
+    db.execute('PRAGMA foreign_key_list(post_likes)')
+  ])
+  const statusMigrations = []
+  if(!postsColumns.rows.some(row => row.name === 'status')){
+    statusMigrations.push("ALTER TABLE posts ADD COLUMN status TEXT NOT NULL DEFAULT 'approved'")
+  }
+  if(!commentsColumns.rows.some(row => row.name === 'status')){
+    statusMigrations.push("ALTER TABLE comments ADD COLUMN status TEXT NOT NULL DEFAULT 'approved'")
+  }
+  if(statusMigrations.length){
+    await db.batch(statusMigrations, 'write')
   }
 
-  const likeForeignKeys = await db.execute('PRAGMA foreign_key_list(post_likes)')
+  await db.batch([
+    'CREATE INDEX IF NOT EXISTS idx_comments_post_status ON comments(post_id, status)',
+    'CREATE INDEX IF NOT EXISTS idx_posts_status_date ON posts(status, date)',
+    'INSERT OR IGNORE INTO visits (id, total) VALUES (1, 0)'
+  ], 'write')
+
   if(!likeForeignKeys.rows.some(row => row.table === 'posts' && row.from === 'post_id' && row.to === 'id')){
     await db.batch([
       `CREATE TABLE post_likes_with_post_fk (
@@ -167,10 +167,6 @@ async function initDb(){
     ], 'write')
   }
 
-  const existingVisitsRow = await db.execute('SELECT total FROM visits WHERE id = 1')
-  if(existingVisitsRow.rows.length === 0){
-    await db.execute('INSERT INTO visits (id, total) VALUES (1, 0)')
-  }
 }
 
 // --- Express app ---

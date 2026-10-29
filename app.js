@@ -33,6 +33,18 @@ function postImageSrc(post){
 	return null
 }
 
+function loadCachedPosts(){
+	try{
+		const stored = localStorage.getItem(LOCAL_POSTS_KEY)
+		if(!stored) return null
+		const posts = JSON.parse(stored)
+		return Array.isArray(posts) && posts.length ? posts : null
+	}catch(e){
+		console.error('Failed to load cached posts:', e.message)
+		return null
+	}
+}
+
 async function loadPosts(){
 	if(apiAvailable === false){
 		return loadLocalPosts()
@@ -41,7 +53,9 @@ async function loadPosts(){
 		const res = await fetch('/api/posts')
 		if(!res.ok) throw new Error('API unavailable')
 		apiAvailable = true
-		return await res.json()
+		const posts = await res.json()
+		saveLocalPosts(posts)
+		return posts
 	}catch(e){
 		apiAvailable = false
 		return loadLocalPosts()
@@ -462,15 +476,15 @@ async function renderModerationQueue(){
 	return true
 }
 
-async function render(){
+async function render(posts){
 	const postsEl = qs('#posts')
 	postsEl.innerHTML = ''
-	const posts = await loadPosts()
-	if(!posts || posts.length === 0){
+	const currentPosts = posts === undefined ? await loadPosts() : posts
+	if(!currentPosts || currentPosts.length === 0){
 		postsEl.innerHTML = '<p class="small">No posts yet — create one above.</p>'
 		return
 	}
-	const newestFirst = posts.slice().reverse()
+	const newestFirst = currentPosts.slice().reverse()
 	const firstImagePost = newestFirst.find(post => postImageSrc(post))
 	newestFirst.forEach(post=>postsEl.appendChild(createPostElement(post, post === firstImagePost)))
 	await renderModerationQueue()
@@ -765,7 +779,6 @@ async function init(){
 	}catch(e){
 		console.error('Failed to initialize browser session for likes:', e.message)
 	}
-	await loadVisitCount()
 	window.addEventListener('storage', (event)=>{
 		if(event.key !== LIKE_STORAGE_KEY || !event.newValue) return
 		document.querySelectorAll('.like').forEach(button=>{
@@ -1088,12 +1101,16 @@ async function init(){
 		})
 	}
 
+	const cachedPosts = loadCachedPosts()
+	if(cachedPosts) await render(cachedPosts)
+
 	const current = await loadPosts()
 	if(!current || current.length === 0){
 		await addPost('Welcome','This is your first post. Edit or delete it, or create new posts using the form above.')
 	} else {
-		await render()
+		await render(current)
 	}
+	void loadVisitCount()
 }
 
 document.addEventListener('DOMContentLoaded', init)
